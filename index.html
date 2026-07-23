@@ -176,6 +176,7 @@ const KUN = ['Dush','Sesh','Chor','Pay','Juma','Shan','Yak'];
 const KUN_FULL = ['Dushanba','Seshanba','Chorshanba','Payshanba','Juma','Shanba','Yakshanba'];
 const MOY = ['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
 const MUASSASA_LABEL = { maktab:'Maktab', litsey:'Akademik litsey', 'kasb-hunar':'Kasb-hunar maktabi', universitet:'Universitet / institut' };
+const SUPERADMIN_CODE = 'REJA-EGASI-2026';
 
 let state = {
   view: 'loading',
@@ -277,6 +278,7 @@ async function loginAs(acc){
 function defaultTab(){
   if(state.user.role==='ota_ona') return 'p_bosh';
   if(state.user.role==='admin') return 'a_elonlar';
+  if(state.user.role==='superadmin') return 'sa_umumiy';
   return 'bosh';
 }
 
@@ -438,6 +440,57 @@ function logout(){
   state.parentData = { children: [], requests: [], unreadByEmail: {} };
   state.adminData = { announcements: [] };
   render();
+}
+
+async function handleSuperadminLogin(e){
+  e.preventDefault();
+  const code = e.target.code.value;
+  const errBox = document.getElementById('auth-err');
+  if(code !== SUPERADMIN_CODE){ errBox.textContent = "Kod noto'g'ri."; return; }
+  state.user = { role:'superadmin', ism:'Tizim egasi', email:'' };
+  state.view = 'app';
+  state.tab = 'sa_umumiy';
+  await loadSuperAdminData();
+  render();
+}
+
+async function loadSuperAdminData(){
+  const listRes = await window.storage.list('account:', true).catch(()=>null);
+  const keys = listRes ? listRes.keys : [];
+  const users = [];
+  for(const k of keys){
+    const acc = await sGet(k);
+    if(acc) users.push(acc);
+  }
+  const talabalar = users.filter(u=>u.role==='talaba');
+  const otaOnalar = users.filter(u=>u.role==='ota_ona');
+  const adminlar = users.filter(u=>u.role==='admin');
+  const muassasalar = [...new Set(talabalar.map(u=>u.muassasaNomi).filter(Boolean))];
+  state.adminData.allUsers = users;
+  state.adminData.talabalar = talabalar;
+  state.adminData.otaOnalar = otaOnalar;
+  state.adminData.adminlar = adminlar;
+  state.adminData.muassasalar = muassasalar;
+}
+
+async function superDeleteUser(email){
+  const ek = sanitizeKey(email);
+  const acc = (state.adminData.allUsers||[]).find(u=>u.email===email);
+  if(!acc) return;
+  const keysToDelete = ['account:'+ek];
+  if(acc.role==='talaba'){
+    keysToDelete.push('schedule:'+ek, 'plans:'+ek, 'reminders:'+ek, 'link_requests:'+ek, 'links_child:'+ek);
+  } else if(acc.role==='ota_ona'){
+    keysToDelete.push('links_parent:'+ek);
+  } else if(acc.role==='admin'){
+    keysToDelete.push('announcements:'+sanitizeKey(acc.muassasaNomi||''));
+  }
+  for(const k of keysToDelete){
+    try{ await window.storage.delete(k, true); }catch(err){}
+  }
+  await loadSuperAdminData();
+  render();
+  showToast("Hisob o'chirildi.");
 }
 
 function switchTab(t){ state.tab = t; state.modal = null; render(); }
@@ -735,6 +788,7 @@ function render(){
 
 function renderAuth(){
   const isLogin = state.authMode === 'login';
+  const isSuperadmin = state.authMode === 'superadmin';
   const role = state.authRole;
   return `
   <div style="padding:40px 22px 30px;">
@@ -743,6 +797,19 @@ function renderAuth(){
       <button class="theme-toggle" id="themeToggleBtn" title="Kun/tun rejimi">${svgIcon(state.theme==='dark'?'sun':'moon')}</button>
     </div>
     <p style="margin-bottom:24px;">Dars jadvali, rejalar, eslatmalar — va oila bilan bog'lanish, bir joyda.</p>
+    ${isSuperadmin ? `
+    <div class="sheet sheet-plum">
+      <div class="eyebrow">Tizim egasi kirishi</div>
+      <form id="superadminForm">
+        <label>Maxfiy kod</label>
+        <input type="password" name="code" placeholder="Kodni kiriting" required autocomplete="off">
+        <div id="auth-err" class="err"></div>
+        <button class="btn-primary btn-plum" type="submit">Kirish</button>
+      </form>
+      <button class="btn-ghost" id="toLoginFromSA" style="margin-top:12px;">← Orqaga</button>
+      <div class="note">Bu oddiy ilova ichidagi kirish eshigi, real xavfsizlik emas — kod HTML manbasida ko'rinadi. Faqat o'zingiz uchun qulaylik sifatida ishlating.</div>
+    </div>
+    ` : `
     <div class="sheet sheet-ruled">
       <div class="eyebrow">${isLogin? 'Kirish' : "Ro'yxatdan o'tish"}</div>
       ${isLogin ? `
@@ -801,6 +868,8 @@ function renderAuth(){
       `}
       <div class="note">Bu — dastlabki versiya (prototip). Ma'lumotlar oddiy bulutli xotirada saqlanadi, bank darajasidagi shifrlash emas — shuning uchun juda maxfiy parol ishlatmang.</div>
     </div>
+    `}
+    ${!isSuperadmin ? `<div style="text-align:center;margin-top:18px;"><button class="btn-ghost" id="toSuperadmin" style="font-size:11.5px;">Tizim egasi kirishi</button></div>` : ''}
   </div>`;
 }
 
@@ -809,6 +878,12 @@ function attachAuthHandlers(){
   const rf = document.getElementById('registerForm');
   if(lf) lf.addEventListener('submit', handleLogin);
   if(rf) rf.addEventListener('submit', handleRegister);
+  const saf = document.getElementById('superadminForm');
+  if(saf) saf.addEventListener('submit', handleSuperadminLogin);
+  const ts = document.getElementById('toSuperadmin');
+  if(ts) ts.addEventListener('click', ()=>{ state.authMode='superadmin'; render(); });
+  const tsa = document.getElementById('toLoginFromSA');
+  if(tsa) tsa.addEventListener('click', ()=>{ state.authMode='login'; render(); });
   const tr = document.getElementById('toRegister');
   const tl = document.getElementById('toLogin');
   if(tr) tr.addEventListener('click', ()=>{ state.authMode='register'; render(); });
@@ -878,6 +953,15 @@ function renderTabs(){
       <button class="tab ${state.tab==='profil'?'active':''}" data-tab="profil">${svgIcon('user')}<span>Profil</span></button>
     </div>`;
   }
+  if(state.user.role==='superadmin'){
+    return `
+    <div class="tabs">
+      <button class="tab ${state.tab==='sa_umumiy'?'active':''}" data-tab="sa_umumiy">${svgIcon('home')}<span>Umumiy</span></button>
+      <button class="tab ${state.tab==='sa_users'?'active':''}" data-tab="sa_users">${svgIcon('users')}<span>Foydalanuvchilar</span></button>
+      <button class="tab ${state.tab==='sa_muassasa'?'active':''}" data-tab="sa_muassasa">${svgIcon('speaker')}<span>Muassasalar</span></button>
+      <button class="tab ${state.tab==='profil'?'active':''}" data-tab="profil">${svgIcon('user')}<span>Profil</span></button>
+    </div>`;
+  }
   return '';
 }
 
@@ -897,6 +981,12 @@ function renderTabContent(){
   }
   if(r==='admin'){
     if(state.tab==='a_elonlar') return renderAdminAnnouncements();
+    if(state.tab==='profil') return renderProfile();
+  }
+  if(r==='superadmin'){
+    if(state.tab==='sa_umumiy') return renderSAOverview();
+    if(state.tab==='sa_users') return renderSAUsers();
+    if(state.tab==='sa_muassasa') return renderSAInstitutions();
     if(state.tab==='profil') return renderProfile();
   }
   return '';
@@ -1089,6 +1179,17 @@ function renderProfile(){
     <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">Chiqish</button>
     `;
   }
+  if(u.role==='superadmin'){
+    return `
+    <div class="sheet sheet-plum">
+      <div class="eyebrow">Profil</div>
+      <h3 style="margin-bottom:2px;">${escapeHtml(u.ism)}</h3>
+      <p>Tizim egasi rejimi — barcha ma'lumotlarga kirish huquqi.</p>
+      <div class="note">Bu rejim faqat siz uchun mo'ljallangan. Chiqqaningizda qaytadan kod kiritishingiz kerak bo'ladi.</div>
+    </div>
+    <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">Chiqish</button>
+    `;
+  }
   return '';
 }
 
@@ -1182,6 +1283,83 @@ function renderAdminAnnouncements(){
       </div>
     `).join('') : `<div class="empty">${svgIcon('speaker')}<div>Hali e'lon joylanmagan. Pastdagi + tugmasi orqali qo'shing.</div></div>`}
   </div>`;
+}
+
+function renderSAOverview(){
+  const d = state.adminData;
+  const stat = (n,label)=> `<div style="flex:1;text-align:center;"><div style="font-family:'Fraunces',serif;font-size:26px;font-weight:600;">${n}</div><div class="item-meta">${label}</div></div>`;
+  return `
+  <div class="sheet sheet-plum">
+    <div class="eyebrow">Platforma bo'yicha umumiy holat</div>
+    <div style="display:flex;padding:6px 0 4px;">
+      ${stat((d.talabalar||[]).length, "O'quvchi/talaba")}
+      ${stat((d.otaOnalar||[]).length, "Ota-ona")}
+      ${stat((d.adminlar||[]).length, "Muassasa admin")}
+      ${stat((d.muassasalar||[]).length, "Muassasa")}
+    </div>
+  </div>
+  <div class="sheet">
+    <div class="eyebrow">So'nggi ro'yxatdan o'tganlar</div>
+    ${(d.allUsers||[]).slice().sort((a,b)=>b.createdAt-a.createdAt).slice(0,6).map(u=>`
+      <div class="plan-item">
+        <div class="item-top">
+          <div><div class="item-title">${escapeHtml(u.ism)}</div><div class="item-meta">${escapeHtml(u.email)}</div></div>
+          <span class="badge ${u.role==='talaba'?'':(u.role==='ota_ona'?'parent':'rep')}">${u.role==='talaba'?"talaba":u.role==='ota_ona'?'ota-ona':'muassasa'}</span>
+        </div>
+      </div>
+    `).join('') || `<div class="empty">Hali hech kim ro'yxatdan o'tmagan.</div>`}
+  </div>
+  <div class="sheet">
+    <button class="btn-small" id="saRefreshBtn">↻ Yangilash</button>
+  </div>
+  `;
+}
+
+function renderSAUsers(){
+  const d = state.adminData;
+  const section = (list, roleLabel)=> list.length ? list.map(u=>`
+    <div class="plan-item">
+      <div class="item-top">
+        <div><div class="item-title">${escapeHtml(u.ism)}</div><div class="item-meta">${escapeHtml(u.email)} ${u.muassasaNomi?'· '+escapeHtml(u.muassasaNomi):''} ${u.sinf?'· '+escapeHtml(u.sinf):''}</div></div>
+        <button class="btn-small btn-danger" data-sa-del="${escapeHtml(u.email)}">O'chirish</button>
+      </div>
+    </div>
+  `).join('') : `<div class="empty">Yo'q.</div>`;
+  return `
+  <div class="sheet">
+    <div class="eyebrow">O'quvchi / talabalar (${(d.talabalar||[]).length})</div>
+    ${section(d.talabalar||[])}
+  </div>
+  <div class="sheet sheet-plum">
+    <div class="eyebrow">Ota-onalar (${(d.otaOnalar||[]).length})</div>
+    ${section(d.otaOnalar||[])}
+  </div>
+  <div class="sheet">
+    <div class="eyebrow">Muassasa adminlari (${(d.adminlar||[]).length})</div>
+    ${section(d.adminlar||[])}
+  </div>
+  `;
+}
+
+function renderSAInstitutions(){
+  const d = state.adminData;
+  const muassasalar = d.muassasalar || [];
+  return `
+  <div class="sheet">
+    <div class="eyebrow">Ro'yxatdagi muassasalar (${muassasalar.length})</div>
+    ${muassasalar.length ? muassasalar.map(m=>{
+      const count = (d.talabalar||[]).filter(u=>u.muassasaNomi===m).length;
+      const hasAdmin = (d.adminlar||[]).some(a=>a.muassasaNomi===m);
+      return `
+      <div class="plan-item">
+        <div class="item-top">
+          <div><div class="item-title">${escapeHtml(m)}</div><div class="item-meta">${count} ta o'quvchi</div></div>
+          <span class="badge ${hasAdmin?'':'rep'}">${hasAdmin?'admin bor':"admin yo'q"}</span>
+        </div>
+      </div>`;
+    }).join('') : `<div class="empty">Hali muassasa nomi kiritilmagan.</div>`}
+  </div>
+  `;
 }
 
 function renderModal(){
@@ -1367,6 +1545,14 @@ function renderModal(){
 
 function attachAppHandlers(){
   document.querySelectorAll('.tab').forEach(t=> t.addEventListener('click', ()=> switchTab(t.dataset.tab)));
+  const saRefresh = document.getElementById('saRefreshBtn');
+  if(saRefresh) saRefresh.addEventListener('click', async ()=>{ await loadSuperAdminData(); render(); });
+  document.querySelectorAll('[data-sa-del]').forEach(b=> b.addEventListener('click', ()=>{
+    const email = b.dataset.saDel;
+    if(confirm("Rostdan ham "+email+" hisobini butunlay o'chirmoqchimisiz? Bu amalni orqaga qaytarib bo'lmaydi.")){
+      superDeleteUser(email);
+    }
+  }));
   const fab = document.getElementById('fabBtn');
   if(fab) fab.addEventListener('click', ()=>{
     if(state.user.role==='talaba'){
