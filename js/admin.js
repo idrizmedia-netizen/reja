@@ -2,7 +2,7 @@
 // Bu fayl index.html'dan butunlay ajratilgan. Oddiy foydalanuvchilar bu sahifani
 // bilishi yoki ko'rishi shart emas — havolasini faqat o'zingiz bilasiz.
 
-const OWNER_EMAIL = 'idrizmedia@gmail.com';
+// OWNER_EMAIL common.js'da e'lon qilingan
 // Zaxira kirish kodi (Google Sign-In sozlanmagan bo'lsa ishlatiladi):
 const SUPERADMIN_CODE = 'REJA-EGASI-2026';
 
@@ -64,7 +64,15 @@ async function loadSuperAdminData(){
   const talabalar = users.filter(u=>u.role==='talaba');
   const otaOnalar = users.filter(u=>u.role==='ota_ona');
   const adminlar = users.filter(u=>u.role==='admin');
-  const muassasalar = [...new Set(talabalar.map(u=>u.muassasaNomi).filter(Boolean))];
+  const muassasalar = [];
+  const seenKeys = new Set();
+  talabalar.forEach(u=>{
+    if(!u.muassasaNomi) return;
+    const k = institutionKey(u);
+    if(seenKeys.has(k)) return;
+    seenKeys.add(k);
+    muassasalar.push({ key: k, viloyat: u.viloyat||'', tuman: u.tuman||'', muassasaNomi: u.muassasaNomi });
+  });
   state.adminData = { allUsers: users, talabalar, otaOnalar, adminlar, muassasalar };
 }
 
@@ -78,7 +86,7 @@ async function superDeleteUser(email){
   } else if(acc.role==='ota_ona'){
     keysToDelete.push('links_parent:'+ek);
   } else if(acc.role==='admin'){
-    keysToDelete.push('announcements:'+sanitizeKey(acc.muassasaNomi||''));
+    keysToDelete.push('announcements:'+institutionKey(acc));
   }
   for(const k of keysToDelete){
     try{ await window.storage.delete(k, true); }catch(err){}
@@ -215,12 +223,12 @@ function renderSAInstitutions(){
   <div class="sheet">
     <div class="eyebrow">Ro'yxatdagi muassasalar (${muassasalar.length})</div>
     ${muassasalar.length ? muassasalar.map(m=>{
-      const count = (d.talabalar||[]).filter(u=>u.muassasaNomi===m).length;
-      const hasAdmin = (d.adminlar||[]).some(a=>a.muassasaNomi===m);
+      const count = (d.talabalar||[]).filter(u=>institutionKey(u)===m.key).length;
+      const hasAdmin = (d.adminlar||[]).some(a=>institutionKey(a)===m.key);
       return `
       <div class="plan-item">
         <div class="item-top">
-          <div><div class="item-title">${escapeHtml(m)}</div><div class="item-meta">${count} ta o'quvchi</div></div>
+          <div><div class="item-title">${escapeHtml(m.muassasaNomi)}</div><div class="item-meta">${escapeHtml(m.viloyat)}, ${escapeHtml(m.tuman)} · ${count} ta o'quvchi</div></div>
           <span class="badge ${hasAdmin?'':'rep'}">${hasAdmin?'admin bor':"admin yo'q"}</span>
         </div>
       </div>`;
