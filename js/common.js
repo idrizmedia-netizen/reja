@@ -80,23 +80,37 @@ function decodeJwt(token){
 }
 
 let _googleInited = false;
-function renderGoogleButton(containerId, onCredential){
-  if(!window.google || !window.google.accounts || !window.google.accounts.id) return;
-  if(GOOGLE_CLIENT_ID.indexOf('YOUR_GOOGLE_CLIENT_ID') === 0) return;
-  if(!_googleInited){
-    google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: (resp)=>{
-        const payload = decodeJwt(resp.credential);
-        if(payload) onCredential(payload);
-      }
-    });
-    _googleInited = true;
+function renderGoogleButton(containerId, onCredential, attempt){
+  attempt = attempt || 0;
+  if(!window.google || !window.google.accounts || !window.google.accounts.id){
+    if(attempt < 50){
+      setTimeout(()=>renderGoogleButton(containerId, onCredential, attempt+1), 200);
+    } else {
+      const el = document.getElementById(containerId);
+      if(el) el.innerHTML = '<div style="font-size:11.5px;color:var(--ink-soft);text-align:center;">Google xizmati yuklanmadi. Internetni tekshiring va sahifani yangilang.</div>';
+    }
+    return;
   }
-  const el = document.getElementById(containerId);
-  if(el){
-    el.innerHTML = '';
-    google.accounts.id.renderButton(el, { theme: 'outline', size: 'large', width: 280, locale: 'uz' });
+  if(GOOGLE_CLIENT_ID.indexOf('YOUR_GOOGLE_CLIENT_ID') === 0) return;
+  try{
+    if(!_googleInited){
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: (resp)=>{
+          const payload = decodeJwt(resp.credential);
+          if(payload) onCredential(payload);
+        }
+      });
+      _googleInited = true;
+    }
+    const el = document.getElementById(containerId);
+    if(el){
+      el.innerHTML = '';
+      google.accounts.id.renderButton(el, { theme: 'outline', size: 'large', width: 280, locale: 'uz' });
+    }
+  }catch(err){
+    const el = document.getElementById(containerId);
+    if(el) el.innerHTML = `<div style="font-size:11.5px;color:var(--alert);text-align:center;">Google tugmasi yuklanmadi: saytingiz manzili Google Cloud Console'dagi "Authorized JavaScript origins" ro'yxatiga qo'shilganini tekshiring.</div>`;
   }
 }
 
