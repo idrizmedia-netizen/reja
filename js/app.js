@@ -65,7 +65,7 @@ async function loginAs(acc){
     await loadParentChildren();
     await computeUnread(state.parentData.children.map(c=>c.email), 'parent');
   } else if(acc.role === 'admin'){
-    const key = 'announcements:'+sanitizeKey(acc.muassasaNomi||acc.email);
+    const key = 'announcements:'+(acc.muassasaNomi ? institutionKey(acc) : sanitizeKey(acc.email));
     state.adminData.announcements = await sGet(key) || [];
   }
   state.view = 'app';
@@ -207,14 +207,22 @@ async function handleRegister(e){
   if(exists){ errBox.textContent = "Bu email allaqachon ro'yxatdan o'tgan. Kirish qiling."; return; }
 
   let acc = { ism, email, parol: b64(parol), role, reminderMode: 'bir_marta', createdAt: Date.now() };
-  if(role === 'talaba'){
-    acc.muassasa = f.muassasa.value;
-    acc.muassasaNomi = f.muassasaNomi.value.trim();
-    acc.sinf = f.sinf.value.trim();
-  } else if(role === 'admin'){
-    acc.muassasa = f.muassasaAdmin.value;
-    acc.muassasaNomi = f.muassasaNomiAdmin.value.trim();
-    if(!acc.muassasaNomi){ errBox.textContent = "Muassasa nomini kiriting."; return; }
+  if(role === 'talaba' || role === 'admin'){
+    const viloyat = f.viloyat.value;
+    const tuman = f.tuman.value;
+    if(!viloyat || !tuman){ errBox.textContent = "Viloyat va tuman/shaharni tanlang."; return; }
+    acc.viloyat = viloyat;
+    acc.tuman = tuman;
+    if(role === 'talaba'){
+      acc.muassasa = f.muassasa.value;
+      acc.muassasaNomi = f.muassasaNomi.value.trim();
+      acc.sinf = f.sinf.value.trim();
+      if(!acc.muassasaNomi || !acc.sinf){ errBox.textContent = "Muassasa raqami va sinf/kursni kiriting."; return; }
+    } else {
+      acc.muassasa = f.muassasaAdmin.value;
+      acc.muassasaNomi = f.muassasaNomiAdmin.value.trim();
+      if(!acc.muassasaNomi){ errBox.textContent = "Muassasa raqami/nomini kiriting."; return; }
+    }
   }
   await sSet(key, acc);
   await loginAs(acc);
@@ -226,19 +234,52 @@ async function handleLogin(e){
   const email = f.email.value.trim().toLowerCase();
   const parol = f.parol.value;
   const errBox = document.getElementById('auth-err');
+  if(email === OWNER_EMAIL){ window.location.href = 'admin.html'; return; }
   const acc = await sGet('account:'+sanitizeKey(email));
-  if(!acc || acc.parol !== b64(parol)){ errBox.textContent = "Email yoki parol noto'g'ri."; return; }
+  if(!acc){ errBox.textContent = "Email yoki parol noto'g'ri."; return; }
+  if(!acc.parol){ errBox.textContent = "Bu hisob faqat Google orqali kiradi — yuqoridagi Google tugmasini bosing."; return; }
+  if(acc.parol !== b64(parol)){ errBox.textContent = "Email yoki parol noto'g'ri."; return; }
   await loginAs(acc);
 }
 
 async function handleGoogleCredential(payload){
   const email = (payload.email||'').trim().toLowerCase();
+  if(email === OWNER_EMAIL){ window.location.href = 'admin.html'; return; }
   const acc = await sGet('account:'+sanitizeKey(email));
+  if(acc){ await loginAs(acc); return; }
+  state.pendingGoogle = { ism: payload.name || email.split('@')[0], email };
+  state.authMode = 'google_complete';
+  state.authRole = 'talaba';
+  render();
+}
+
+async function handleGoogleCompleteSubmit(e){
+  e.preventDefault();
+  const f = e.target;
+  const role = state.authRole;
+  const pg = state.pendingGoogle;
   const errBox = document.getElementById('auth-err');
-  if(!acc){
-    if(errBox) errBox.textContent = "Bu email bilan hisob topilmadi. Avval pastda oddiy tarzda ro'yxatdan o'ting (xuddi shu email bilan).";
-    return;
+  const key = 'account:'+sanitizeKey(pg.email);
+  let acc = { ism: pg.ism, email: pg.email, parol: null, authProvider: 'google', role, reminderMode: 'bir_marta', createdAt: Date.now() };
+  if(role === 'talaba' || role === 'admin'){
+    const viloyat = f.g_viloyat.value;
+    const tuman = f.g_tuman.value;
+    if(!viloyat || !tuman){ errBox.textContent = "Viloyat va tuman/shaharni tanlang."; return; }
+    acc.viloyat = viloyat;
+    acc.tuman = tuman;
+    if(role === 'talaba'){
+      acc.muassasa = f.muassasa.value;
+      acc.muassasaNomi = f.muassasaNomi.value.trim();
+      acc.sinf = f.sinf.value.trim();
+      if(!acc.muassasaNomi || !acc.sinf){ errBox.textContent = "Muassasa raqami va sinf/kursni kiriting."; return; }
+    } else {
+      acc.muassasa = f.muassasaAdmin.value;
+      acc.muassasaNomi = f.muassasaNomiAdmin.value.trim();
+      if(!acc.muassasaNomi){ errBox.textContent = "Muassasa raqami/nomini kiriting."; return; }
+    }
   }
+  await sSet(key, acc);
+  state.pendingGoogle = null;
   await loginAs(acc);
 }
 
@@ -509,7 +550,7 @@ async function postAnnouncement(e){
   const matn = f.matn.value.trim();
   const errBox = document.getElementById('modal-err');
   if(!matn){ errBox.textContent = "E'lon matnini kiriting."; return; }
-  const key = 'announcements:'+sanitizeKey(state.user.muassasaNomi);
+  const key = 'announcements:'+institutionKey(state.user);
   const editId = state.modal.editId;
   let list = await sGet(key) || [];
   if(editId){
@@ -525,7 +566,7 @@ async function postAnnouncement(e){
 }
 
 async function delAnnouncement(id){
-  const key = 'announcements:'+sanitizeKey(state.user.muassasaNomi);
+  const key = 'announcements:'+institutionKey(state.user);
   state.adminData.announcements = state.adminData.announcements.filter(a=>a.id!==id);
   await sSet(key, state.adminData.announcements);
   render();
@@ -540,9 +581,49 @@ function render(){
   attachAppHandlers();
 }
 
+function viloyatOptionsHtml(selected){
+  return '<option value="">— Viloyatni tanlang —</option>' + Object.keys(HUDUDLAR).map(v=>
+    `<option value="${v}" ${selected===v?'selected':''}>${v}</option>`
+  ).join('');
+}
+
+function institutionFieldsHtml(role, prefix){
+  if(role !== 'talaba' && role !== 'admin') return '';
+  const label = role === 'talaba' ? 'Ta\'lim muassasasi turi' : 'Muassasa turi';
+  const selName = role === 'talaba' ? 'muassasa' : 'muassasaAdmin';
+  const nomiName = role === 'talaba' ? 'muassasaNomi' : 'muassasaNomiAdmin';
+  return `
+    <label>Viloyat</label>
+    <select name="${prefix}viloyat" class="viloyat-select" required>
+      ${viloyatOptionsHtml('')}
+    </select>
+    <label>Tuman / shahar</label>
+    <select name="${prefix}tuman" class="tuman-select" required>
+      <option value="">— Avval viloyatni tanlang —</option>
+    </select>
+    <label>${label}</label>
+    <select name="${selName}" required>
+      <option value="maktab">Maktab</option>
+      <option value="litsey">Akademik litsey</option>
+      <option value="kasb-hunar">Kasb-hunar maktabi</option>
+      <option value="universitet">Universitet / institut</option>
+    </select>
+    <label>Muassasa raqami / nomi</label>
+    <input type="text" name="${nomiName}" placeholder="Masalan: 28-maktab" required>
+    ${role==='talaba' ? `
+    <label>Sinf / kurs</label>
+    <input type="text" name="sinf" placeholder="Masalan: 9-sinf yoki 2-kurs" required>
+    ` : `
+    <div class="note" style="margin-top:8px;">O'quvchilaringiz ro'yxatdan o'tishda xuddi shu viloyat, tuman va muassasa raqamini kiritishi kerak — shundagina e'lonlaringizni ko'rishadi.</div>
+    `}
+  `;
+}
+
 function renderAuth(){
   const isLogin = state.authMode === 'login';
+  const isGoogleComplete = state.authMode === 'google_complete';
   const role = state.authRole;
+  const pg = state.pendingGoogle || {};
   return `
   <div style="padding:40px 22px 30px;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;">
@@ -550,6 +631,24 @@ function renderAuth(){
       <button class="theme-toggle" id="themeToggleBtn" title="Kun/tun rejimi">${svgIcon(state.theme==='dark'?'sun':'moon')}</button>
     </div>
     <p style="margin-bottom:24px;">Dars jadvali, rejalar, eslatmalar — va oila bilan bog'lanish, bir joyda.</p>
+    ${isGoogleComplete ? `
+    <div class="sheet sheet-plum">
+      <div class="eyebrow">Ro'yxatni yakunlang</div>
+      <p>Google hisobingiz tasdiqlandi (<strong>${escapeHtml(pg.email)}</strong>). Davom etish uchun quyidagi maydonlarni to'ldiring.</p>
+      <label style="margin-top:0;">Siz kimsiz?</label>
+      <div class="segrow">
+        <button type="button" class="seg role-btn ${role==='talaba'?'on':''}" data-role="talaba">O'quvchi / talaba</button>
+        <button type="button" class="seg role-btn ${role==='ota_ona'?'on':''}" data-role="ota_ona">Ota-ona</button>
+        <button type="button" class="seg role-btn ${role==='admin'?'on':''}" data-role="admin">Muassasa</button>
+      </div>
+      <form id="googleCompleteForm">
+        ${institutionFieldsHtml(role, 'g_')}
+        <div id="auth-err" class="err"></div>
+        <button class="btn-primary btn-plum" type="submit">Yakunlash va kirish</button>
+      </form>
+      <button class="btn-ghost" id="cancelGoogleComplete" style="margin-top:12px;">← Bekor qilish</button>
+    </div>
+    ` : `
     <div class="sheet sheet-ruled">
       <div class="eyebrow">${isLogin? 'Kirish' : "Ro'yxatdan o'tish"}</div>
       ${isLogin ? `<div id="googleSigninContainer" style="margin-bottom:14px;display:flex;justify-content:center;"></div>
@@ -578,31 +677,7 @@ function renderAuth(){
         <input type="email" name="email" placeholder="ism@misol.uz" required>
         <label>Parol</label>
         <input type="password" name="parol" placeholder="Kamida 4 ta belgi" required>
-        ${role==='talaba' ? `
-        <label>Ta'lim muassasasi turi</label>
-        <select name="muassasa">
-          <option value="maktab">Maktab</option>
-          <option value="litsey">Akademik litsey</option>
-          <option value="kasb-hunar">Kasb-hunar maktabi</option>
-          <option value="universitet">Universitet / institut</option>
-        </select>
-        <label>Muassasa nomi (ixtiyoriy)</label>
-        <input type="text" name="muassasaNomi" placeholder="Masalan: 21-maktab">
-        <label>Sinf / kurs (ixtiyoriy)</label>
-        <input type="text" name="sinf" placeholder="Masalan: 9-sinf yoki 2-kurs">
-        ` : ''}
-        ${role==='admin' ? `
-        <label>Muassasa turi</label>
-        <select name="muassasaAdmin">
-          <option value="maktab">Maktab</option>
-          <option value="litsey">Akademik litsey</option>
-          <option value="kasb-hunar">Kasb-hunar maktabi</option>
-          <option value="universitet">Universitet / institut</option>
-        </select>
-        <label>Muassasa nomi</label>
-        <input type="text" name="muassasaNomiAdmin" placeholder="Masalan: 21-maktab" required>
-        <div class="note" style="margin-top:8px;">O'quvchilaringiz ro'yxatdan o'tishda xuddi shu nomni kiritishi kerak — shundagina e'lonlaringizni ko'rishadi.</div>
-        ` : ''}
+        ${institutionFieldsHtml(role, '')}
         <div id="auth-err" class="err"></div>
         <button class="btn-primary" type="submit">Ro'yxatdan o'tish</button>
       </form>
@@ -610,19 +685,31 @@ function renderAuth(){
       `}
       <div class="note">Bu — dastlabki versiya (prototip). Ma'lumotlar oddiy bulutli xotirada saqlanadi, bank darajasidagi shifrlash emas — shuning uchun juda maxfiy parol ishlatmang.</div>
     </div>
+    `}
   </div>`;
 }
 
 function attachAuthHandlers(){
   const lf = document.getElementById('loginForm');
   const rf = document.getElementById('registerForm');
+  const gcf = document.getElementById('googleCompleteForm');
   if(lf) lf.addEventListener('submit', handleLogin);
   if(rf) rf.addEventListener('submit', handleRegister);
+  if(gcf) gcf.addEventListener('submit', handleGoogleCompleteSubmit);
   const tr = document.getElementById('toRegister');
   const tl = document.getElementById('toLogin');
   if(tr) tr.addEventListener('click', ()=>{ state.authMode='register'; render(); });
   if(tl) tl.addEventListener('click', ()=>{ state.authMode='login'; render(); });
+  const cgc = document.getElementById('cancelGoogleComplete');
+  if(cgc) cgc.addEventListener('click', ()=>{ state.authMode='login'; state.pendingGoogle=null; render(); });
   document.querySelectorAll('.role-btn').forEach(b=> b.addEventListener('click', ()=> setAuthRole(b.dataset.role)));
+  document.querySelectorAll('.viloyat-select').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      const tumanSel = sel.parentElement.querySelector('.tuman-select') || sel.closest('form').querySelector('.tuman-select');
+      const list = HUDUDLAR[sel.value] || [];
+      tumanSel.innerHTML = '<option value="">— Tanlang —</option>' + list.map(t=>`<option value="${t}">${t}</option>`).join('');
+    });
+  });
   const ttb = document.getElementById('themeToggleBtn');
   if(ttb) ttb.addEventListener('click', toggleTheme);
   if(state.authMode === 'login' && document.getElementById('googleSigninContainer')){
@@ -832,6 +919,7 @@ function renderProfile(){
       <h3 style="margin-bottom:2px;">${escapeHtml(u.ism)}</h3>
       <p style="margin-bottom:2px;">${escapeHtml(u.email)}</p>
       <p>${MUASSASA_LABEL[u.muassasa]||''} ${u.sinf? '· '+escapeHtml(u.sinf) : ''} ${u.muassasaNomi?'· '+escapeHtml(u.muassasaNomi):''}</p>
+      ${u.viloyat ? `<p style="margin-top:-10px;">${escapeHtml(u.viloyat)}${u.tuman?', '+escapeHtml(u.tuman):''}</p>` : ''}
     </div>
     ${reqs.length ? `
     <div class="sheet sheet-plum">
@@ -896,6 +984,7 @@ function renderProfile(){
       <h3 style="margin-bottom:2px;">${escapeHtml(u.ism)}</h3>
       <p style="margin-bottom:2px;">${escapeHtml(u.email)}</p>
       <p>${MUASSASA_LABEL[u.muassasa]||''} · ${escapeHtml(u.muassasaNomi)}</p>
+      ${u.viloyat ? `<p style="margin-top:-10px;">${escapeHtml(u.viloyat)}${u.tuman?', '+escapeHtml(u.tuman):''}</p>` : ''}
       <div class="note">O'quvchilar ro'yxatdan o'tishda "${escapeHtml(u.muassasaNomi)}" nomini kiritishsa, sizning e'lonlaringizni ko'radi.</div>
     </div>
     <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">Chiqish</button>
@@ -1272,7 +1361,7 @@ function attachAppHandlers(){
 
 async function loadStudentAnnouncements(){
   if(state.user && state.user.role==='talaba' && state.user.muassasaNomi){
-    const key = 'announcements:'+sanitizeKey(state.user.muassasaNomi);
+    const key = 'announcements:'+institutionKey(state.user);
     state.data._announcements = await sGet(key) || [];
     render();
   }
@@ -1285,4 +1374,3 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.register('service-worker.js').catch(()=>{});
   });
 }
-
