@@ -1,8 +1,11 @@
-const CACHE_NAME = 'reja-cache-v1';
+const CACHE_NAME = 'reja-cache-v2';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
+  './css/style.css',
+  './js/common.js',
+  './js/app.js',
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];
@@ -25,6 +28,8 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  // admin.html va uning JS fayli hech qachon keshlanmaydi (har doim tarmoqdan olinadi)
+  if (event.request.url.includes('admin.html') || event.request.url.includes('js/admin.js')) return;
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const network = fetch(event.request)
