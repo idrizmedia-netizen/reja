@@ -44,9 +44,9 @@ async function toggleTheme(){
   render();
 }
 
-async function sGet(key){ try{ const r = await window.storage.get(key, true); return r ? JSON.parse(r.value) : null; }catch(e){ return null; } }
+async function sGet(key){ try{ const r = await window.storage.get(key, true); return r ? r.value : null; }catch(e){ return null; } }
 
-async function sSet(key, val){ try{ return await window.storage.set(key, JSON.stringify(val), true); }catch(e){ console.error(e); return null; } }
+async function sSet(key, val){ try{ return await window.storage.set(key, val, true); }catch(e){ console.error(e); return null; } }
 
 function svgIcon(name){
   const icons = {
@@ -59,60 +59,90 @@ function svgIcon(name){
     chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v11H8l-4 4V5z"/></svg>',
     speaker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10v4h4l6 4V6L7 10H3z"/><path d="M17 9a4 4 0 010 6"/></svg>',
     sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg>',
-    moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 14.5A8.5 8.5 0 019.5 4a8.5 8.5 0 1010.5 10.5z"/></svg>'
+    moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 14.5A8.5 8.5 0 019.5 4a8.5 8.5 0 1010.5 10.5z"/></svg>',
+    grade: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l4 4v14a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 9l2 2 4-4"/><path d="M8 15h8"/></svg>'
   };
   return icons[name]||'';
 }
 
 
-// ===== Google orqali kirish (Google Sign-In) =====
-// MUHIM: bu yerga Google Cloud Console'da yaratgan haqiqiy OAuth Client ID'ni qo'ying.
-// Ko'rsatma: https://console.cloud.google.com -> APIs & Services -> Credentials -> Create OAuth client ID -> Web application
-// Authorized JavaScript origins qismiga saytingiz manzilini qo'shing (masalan https://username.github.io)
-const GOOGLE_CLIENT_ID = '331359116271-ru7hpjlf4hnevjedp8u02v70ras5tu8d.apps.googleusercontent.com';
+// ===== Firebase: ilovaning haqiqiy backend'i =====
+const firebaseConfig = {
+  apiKey: "AIzaSyAKphkVF5p-RUmeVXnpfZexXxyrmOFsU20",
+  authDomain: "reja-224b0.firebaseapp.com",
+  projectId: "reja-224b0",
+  storageBucket: "reja-224b0.firebasestorage.app",
+  messagingSenderId: "126743815442",
+  appId: "1:126743815442:web:3596eb71a04d2ef7d4ffcb",
+  measurementId: "G-14Q1QW4LBT"
+};
+firebase.initializeApp(firebaseConfig);
+const _auth = firebase.auth();
+const _db = firebase.firestore();
 
-function decodeJwt(token){
-  try{
-    const payload = token.split('.')[1];
-    const json = decodeURIComponent(atob(payload.replace(/-/g,'+').replace(/_/g,'/')).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
-    return JSON.parse(json);
-  }catch(e){ return null; }
+// window.storage'ni Firestore bilan ta'minlaymiz — app.js/admin.js hech narsani
+// o'zgartirmasdan, xuddi avvalgidek window.storage.get/set/delete/list chaqiradi,
+// lekin ma'lumot endi Claude vaqtinchalik xotirasida emas, haqiqiy Firestore bazasida saqlanadi.
+window.storage = {
+  async get(key, shared){
+    try{
+      const snap = await _db.collection('kv').doc(key).get();
+      if(!snap.exists) return null;
+      return { key, value: snap.data().value, shared: !!shared };
+    }catch(e){ console.error('storage.get', e); return null; }
+  },
+  async set(key, value, shared){
+    try{
+      await _db.collection('kv').doc(key).set({ key, value, shared: !!shared, updatedAt: Date.now() });
+      return { key, value, shared: !!shared };
+    }catch(e){ console.error('storage.set', e); return null; }
+  },
+  async delete(key, shared){
+    try{
+      await _db.collection('kv').doc(key).delete();
+      return { key, deleted: true, shared: !!shared };
+    }catch(e){ console.error('storage.delete', e); return null; }
+  },
+  async list(prefix, shared){
+    try{
+      const snap = await _db.collection('kv').get();
+      const keys = [];
+      snap.forEach(doc=>{ if(!prefix || doc.id.startsWith(prefix)) keys.push(doc.id); });
+      return { keys, prefix, shared: !!shared };
+    }catch(e){ console.error('storage.list', e); return null; }
+  }
+};
+
+// ===== Firebase Authentication yordamchilari =====
+async function fbRegister(email, parol){
+  return _auth.createUserWithEmailAndPassword(email, parol);
+}
+async function fbLogin(email, parol){
+  return _auth.signInWithEmailAndPassword(email, parol);
+}
+async function fbGoogleSignIn(){
+  const provider = new firebase.auth.GoogleAuthProvider();
+  return _auth.signInWithPopup(provider);
+}
+async function fbSendPasswordReset(email){
+  return _auth.sendPasswordResetEmail(email);
+}
+function fbErrorToUzbek(err){
+  const code = (err && err.code) || '';
+  const map = {
+    'auth/email-already-in-use': "Bu email allaqachon ro'yxatdan o'tgan. Kirish qiling.",
+    'auth/invalid-email': "Email manzili noto'g'ri.",
+    'auth/weak-password': "Parol juda oddiy — kamida 6 ta belgi bo'lsin.",
+    'auth/user-not-found': "Bunday hisob topilmadi.",
+    'auth/wrong-password': "Email yoki parol noto'g'ri.",
+    'auth/invalid-credential': "Email yoki parol noto'g'ri.",
+    'auth/too-many-requests': "Juda ko'p urinish. Biroz kutib qayta urinib ko'ring.",
+    'auth/popup-closed-by-user': "Google oynasi yopib yuborildi.",
+    'auth/network-request-failed': "Internet aloqasi bilan muammo."
+  };
+  return map[code] || ("Xatolik: " + (err && err.message ? err.message : "noma'lum"));
 }
 
-let _googleInited = false;
-function renderGoogleButton(containerId, onCredential, attempt){
-  attempt = attempt || 0;
-  if(!window.google || !window.google.accounts || !window.google.accounts.id){
-    if(attempt < 50){
-      setTimeout(()=>renderGoogleButton(containerId, onCredential, attempt+1), 200);
-    } else {
-      const el = document.getElementById(containerId);
-      if(el) el.innerHTML = '<div style="font-size:11.5px;color:var(--ink-soft);text-align:center;">Google xizmati yuklanmadi. Internetni tekshiring va sahifani yangilang.</div>';
-    }
-    return;
-  }
-  if(GOOGLE_CLIENT_ID.indexOf('YOUR_GOOGLE_CLIENT_ID') === 0) return;
-  try{
-    if(!_googleInited){
-      google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: (resp)=>{
-          const payload = decodeJwt(resp.credential);
-          if(payload) onCredential(payload);
-        }
-      });
-      _googleInited = true;
-    }
-    const el = document.getElementById(containerId);
-    if(el){
-      el.innerHTML = '';
-      google.accounts.id.renderButton(el, { theme: 'outline', size: 'large', width: 280, locale: 'uz' });
-    }
-  }catch(err){
-    const el = document.getElementById(containerId);
-    if(el) el.innerHTML = `<div style="font-size:11.5px;color:var(--alert);text-align:center;">Google tugmasi yuklanmadi: saytingiz manzili Google Cloud Console'dagi "Authorized JavaScript origins" ro'yxatiga qo'shilganini tekshiring.</div>`;
-  }
-}
 
 const OWNER_EMAIL = 'idrizmedia@gmail.com';
 
