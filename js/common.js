@@ -79,6 +79,16 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const _auth = firebase.auth();
 const _db = firebase.firestore();
+const _storage = firebase.storage ? firebase.storage() : null;
+
+async function uploadImage(path, file){
+  if(!_storage) throw new Error("Firebase Storage sozlanmagan.");
+  const MAX_BYTES = 4 * 1024 * 1024;
+  if(file.size > MAX_BYTES) throw new Error("Rasm hajmi 4MB dan oshmasin.");
+  const ref = _storage.ref().child(path);
+  await ref.put(file);
+  return await ref.getDownloadURL();
+}
 
 // window.storage'ni Firestore bilan ta'minlaymiz — app.js/admin.js hech narsani
 // o'zgartirmasdan, xuddi avvalgidek window.storage.get/set/delete/list chaqiradi,
@@ -127,6 +137,10 @@ async function fbGoogleSignIn(){
 async function fbSendPasswordReset(email){
   return _auth.sendPasswordResetEmail(email);
 }
+async function fbLinkPassword(email, parol){
+  const cred = firebase.auth.EmailAuthProvider.credential(email, parol);
+  return _auth.currentUser.linkWithCredential(cred);
+}
 function fbErrorToUzbek(err){
   const code = (err && err.code) || '';
   const map = {
@@ -138,7 +152,10 @@ function fbErrorToUzbek(err){
     'auth/invalid-credential': "Email yoki parol noto'g'ri.",
     'auth/too-many-requests': "Juda ko'p urinish. Biroz kutib qayta urinib ko'ring.",
     'auth/popup-closed-by-user': "Google oynasi yopib yuborildi.",
-    'auth/network-request-failed': "Internet aloqasi bilan muammo."
+    'auth/network-request-failed': "Internet aloqasi bilan muammo.",
+    'auth/provider-already-linked': "Bu hisobga parol allaqachon o'rnatilgan.",
+    'auth/credential-already-in-use': "Bu parol boshqa hisobga bog'langan.",
+    'auth/requires-recent-login': "Xavfsizlik uchun qayta kirib, so'ng qayta urining."
   };
   return map[code] || ("Xatolik: " + (err && err.message ? err.message : "noma'lum"));
 }
@@ -198,4 +215,48 @@ function _hideInstallFab(){
 
 function institutionKey(acc){
   return sanitizeKey((acc.viloyat||'')+'|'+(acc.tuman||'')+'|'+(acc.muassasaNomi||''));
+}
+
+// ===== Til tanlash (asosiy navigatsiya va tugmalar uchun) =====
+const I18N = {
+  uz: {
+    tagline: "Dars jadvali, rejalar, eslatmalar — va oila bilan bog'lanish, bir joyda.",
+    tab_bosh: "Bosh sahifa", tab_jadval: "Jadval", tab_rejalar: "Rejalar", tab_eslatma: "Eslatmalar",
+    tab_baholar: "Baholar", tab_profil: "Profil", tab_farzandlar: "Farzandlar", tab_elonlar: "E'lonlar",
+    tab_umumiy: "Umumiy", tab_users: "Foydalanuvchilar", tab_muassasa: "Muassasalar",
+    kirish: "Kirish", royxatdan_otish: "Ro'yxatdan o'tish", chiqish: "Chiqish",
+    saqlash: "Saqlash", bekor_qilish: "Bekor qilish", yangilash: "Yangilash", tahrirlash: "Tahrirlash",
+    parolni_unutdingiz: "Parolni unutdingizmi?", google_orqali: "Google orqali kirish"
+  },
+  ru: {
+    tagline: "Расписание уроков, планы, напоминания — и связь с семьёй, в одном месте.",
+    tab_bosh: "Главная", tab_jadval: "Расписание", tab_rejalar: "Планы", tab_eslatma: "Напоминания",
+    tab_baholar: "Оценки", tab_profil: "Профиль", tab_farzandlar: "Дети", tab_elonlar: "Объявления",
+    tab_umumiy: "Обзор", tab_users: "Пользователи", tab_muassasa: "Учреждения",
+    kirish: "Войти", royxatdan_otish: "Регистрация", chiqish: "Выйти",
+    saqlash: "Сохранить", bekor_qilish: "Отмена", yangilash: "Обновить", tahrirlash: "Изменить",
+    parolni_unutdingiz: "Забыли пароль?", google_orqali: "Войти через Google"
+  },
+  en: {
+    tagline: "Class schedule, plans, reminders — and staying connected with family, all in one place.",
+    tab_bosh: "Home", tab_jadval: "Schedule", tab_rejalar: "Plans", tab_eslatma: "Reminders",
+    tab_baholar: "Grades", tab_profil: "Profile", tab_farzandlar: "Children", tab_elonlar: "Announcements",
+    tab_umumiy: "Overview", tab_users: "Users", tab_muassasa: "Institutions",
+    kirish: "Log in", royxatdan_otish: "Sign up", chiqish: "Log out",
+    saqlash: "Save", bekor_qilish: "Cancel", yangilash: "Refresh", tahrirlash: "Edit",
+    parolni_unutdingiz: "Forgot password?", google_orqali: "Sign in with Google"
+  }
+};
+function t(key){
+  const lang = (typeof state !== 'undefined' && state.lang) ? state.lang : 'uz';
+  return (I18N[lang] && I18N[lang][key]) || I18N.uz[key] || key;
+}
+function cycleLang(){
+  const order = ['uz','ru','en'];
+  const i = order.indexOf(state.lang || 'uz');
+  state.lang = order[(i+1) % order.length];
+  if(state.user && state.user.email){
+    sSet('account:'+sanitizeKey(state.user.email), Object.assign({}, state.user, { lang: state.lang })).catch(()=>{});
+  }
+  render();
 }
