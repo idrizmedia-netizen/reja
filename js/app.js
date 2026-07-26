@@ -273,6 +273,26 @@ async function handleEditProfileSubmit(e){
   render();
 }
 
+async function handleSetPasswordSubmit(e){
+  e.preventDefault();
+  const f = e.target;
+  const errBox = document.getElementById('modal-err');
+  const parol = f.parol.value;
+  const parol2 = f.parol2.value;
+  if(parol.length < 6){ errBox.textContent = "Parol kamida 6 ta belgidan iborat bo'lsin."; return; }
+  if(parol !== parol2){ errBox.textContent = "Parollar bir xil emas."; return; }
+  try{
+    await fbLinkPassword(state.user.email, parol);
+  }catch(err){
+    errBox.textContent = fbErrorToUzbek(err);
+    return;
+  }
+  state.user.authProvider = 'google+password';
+  await sSet('account:'+sanitizeKey(state.user.email), state.user);
+  closeModal();
+  showToast("Parol o'rnatildi. Endi email va parol bilan ham kira olasiz.");
+}
+
 async function handleLogin(e){
   e.preventDefault();
   const f = e.target;
@@ -1211,6 +1231,7 @@ function renderProfile(){
       <p>${MUASSASA_LABEL[u.muassasa]||''} ${u.sinf? '· '+escapeHtml(u.sinf) : ''} ${u.muassasaNomi?'· '+escapeHtml(u.muassasaNomi):''}</p>
       ${u.viloyat ? `<p style="margin-top:-10px;">${escapeHtml(u.viloyat)}${u.tuman?', '+escapeHtml(u.tuman):''}</p>` : ''}
       <button class="btn-small" id="editProfileBtn">✎ Profilni tahrirlash</button>
+      ${u.authProvider==='google' ? `<button class="btn-small btn-plum" id="setPasswordBtn" style="margin-left:6px;">🔑 Parol o'rnatish</button>` : ''}
     </div>
     ${reqs.length ? `
     <div class="sheet sheet-plum">
@@ -1260,6 +1281,7 @@ function renderProfile(){
       <h3 style="margin-bottom:2px;">${escapeHtml(u.ism)}</h3>
       <p>${escapeHtml(u.email)} · Ota-ona hisobi</p>
       <button class="btn-small" id="editProfileBtn">✎ Profilni tahrirlash</button>
+      ${u.authProvider==='google' ? `<button class="btn-small btn-plum" id="setPasswordBtn" style="margin-left:6px;">🔑 Parol o'rnatish</button>` : ''}
     </div>
     <div class="sheet">
       <div class="eyebrow">Farzand qo'shish</div>
@@ -1279,6 +1301,7 @@ function renderProfile(){
       ${u.viloyat ? `<p style="margin-top:-10px;">${escapeHtml(u.viloyat)}${u.tuman?', '+escapeHtml(u.tuman):''}</p>` : ''}
       <div class="note">O'quvchilar ro'yxatdan o'tishda "${escapeHtml(u.muassasaNomi)}" nomini kiritishsa, sizning e'lonlaringizni ko'radi.</div>
       <button class="btn-small" id="editProfileBtn" style="margin-top:10px;">✎ Profilni tahrirlash</button>
+      ${u.authProvider==='google' ? `<button class="btn-small btn-plum" id="setPasswordBtn" style="margin-left:6px;">🔑 Parol o'rnatish</button>` : ''}
     </div>
     <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">Chiqish</button>
     `;
@@ -1567,6 +1590,23 @@ function renderModal(){
     </div>
   </div>`;
   }
+  if(k==='setPassword'){
+    return `
+  <div class="modal-wrap" id="modalWrap">
+    <div class="modal">
+      <div class="modal-head"><h3>Parol o'rnatish</h3><button class="close-x" id="modalClose">✕</button></div>
+      <p>Hozir Google orqali kirasiz. Bu yerda parol o'rnatsangiz, keyinchalik email va parol bilan ham kira olasiz.</p>
+      <form id="setPasswordForm">
+        <label>Yangi parol</label>
+        <input type="password" name="parol" placeholder="Kamida 6 ta belgi" required>
+        <label>Parolni takrorlang</label>
+        <input type="password" name="parol2" placeholder="Parolni qayta yozing" required>
+        <div id="modal-err" class="err"></div>
+        <button class="btn-primary btn-plum" type="submit">Saqlash</button>
+      </form>
+    </div>
+  </div>`;
+  }
   if(k==='addChild') return `
   <div class="modal-wrap" id="modalWrap">
     <div class="modal">
@@ -1695,6 +1735,8 @@ function attachAppHandlers(){
   if(lb) lb.addEventListener('click', logout);
   const epb = document.getElementById('editProfileBtn');
   if(epb) epb.addEventListener('click', ()=> openModal('editProfile'));
+  const spb = document.getElementById('setPasswordBtn');
+  if(spb) spb.addEventListener('click', ()=> openModal('setPassword'));
   const mb = document.getElementById('modeBirMarta');
   if(mb) mb.addEventListener('click', ()=> setReminderMode('bir_marta'));
   const mh = document.getElementById('modeHarDars');
@@ -1767,6 +1809,8 @@ function attachAppHandlers(){
   if(hwf) hwf.addEventListener('submit', addHomework);
   const epf = document.getElementById('editProfileForm');
   if(epf) epf.addEventListener('submit', handleEditProfileSubmit);
+  const spf = document.getElementById('setPasswordForm');
+  if(spf) spf.addEventListener('submit', handleSetPasswordSubmit);
   initGradesChart();
   document.querySelectorAll('.viloyat-select').forEach(sel=>{
     sel.addEventListener('change', ()=>{
