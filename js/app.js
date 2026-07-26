@@ -115,12 +115,14 @@ async function loadParentChildren(){
   for(const em of childEmails){
     const acc = await sGet('account:'+sanitizeKey(em));
     if(!acc) continue;
-    const [sc, pl, rm] = await Promise.all([
+    const [sc, pl, rm, gr, hw] = await Promise.all([
       sGet('schedule:'+sanitizeKey(em)),
       sGet('plans:'+sanitizeKey(em)),
-      sGet('reminders:'+sanitizeKey(em))
+      sGet('reminders:'+sanitizeKey(em)),
+      sGet('grades:'+sanitizeKey(em)),
+      sGet('homework:'+sanitizeKey(em))
     ]);
-    children.push({ email: em, acc, schedule: sc||[], plans: pl||[], reminders: rm||[] });
+    children.push({ email: em, acc, schedule: sc||[], plans: pl||[], reminders: rm||[], grades: gr||[], homework: hw||[] });
   }
   state.parentData.children = children;
 }
@@ -239,6 +241,36 @@ async function handleRegister(e){
   }
   await sSet('account:'+sanitizeKey(email), acc);
   await loginAs(acc);
+}
+
+async function handleEditProfileSubmit(e){
+  e.preventDefault();
+  const f = e.target;
+  const errBox = document.getElementById('modal-err');
+  const u = state.user;
+  const ism = f.ism.value.trim();
+  if(!ism){ errBox.textContent = "Ismni kiriting."; return; }
+  u.ism = ism;
+  if(u.role==='talaba' || u.role==='admin'){
+    const viloyat = f.viloyat.value;
+    const tuman = f.tuman.value;
+    const muassasa = f.muassasa.value;
+    const muassasaNomi = f.muassasaNomi.value.trim();
+    if(!viloyat || !tuman || !muassasaNomi){ errBox.textContent = "Barcha maydonlarni to'ldiring."; return; }
+    u.viloyat = viloyat;
+    u.tuman = tuman;
+    u.muassasa = muassasa;
+    u.muassasaNomi = muassasaNomi;
+    if(u.role==='talaba'){
+      const sinf = f.sinf.value.trim();
+      if(!sinf){ errBox.textContent = "Sinf/kursni kiriting."; return; }
+      u.sinf = sinf;
+    }
+  }
+  await sSet('account:'+sanitizeKey(u.email), u);
+  closeModal();
+  showToast("Profil yangilandi.");
+  render();
 }
 
 async function handleLogin(e){
@@ -1079,11 +1111,53 @@ function renderReminders(){
   </div>`;
 }
 
+let _gradesChartInstance = null;
+function initGradesChart(){
+  const canvas = document.getElementById('gradesChart');
+  if(!canvas || typeof Chart === 'undefined') return;
+  if(_gradesChartInstance){ _gradesChartInstance.destroy(); _gradesChartInstance = null; }
+  const numericGrades = (state.data.grades||[]).filter(g=> !isNaN(parseFloat(g.baho))).slice().sort((a,b)=>a.sana.localeCompare(b.sana));
+  if(numericGrades.length < 2) return;
+  const rootStyles = getComputedStyle(document.body);
+  const accent = rootStyles.getPropertyValue('--accent').trim() || '#E7A63D';
+  const ink = rootStyles.getPropertyValue('--ink').trim() || '#16233B';
+  const line = rootStyles.getPropertyValue('--line').trim() || '#C7D3E0';
+  _gradesChartInstance = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: numericGrades.map(g=>fmtDate(g.sana)),
+      datasets: [{
+        label: 'Baho',
+        data: numericGrades.map(g=>parseFloat(g.baho)),
+        borderColor: accent,
+        backgroundColor: accent,
+        tension: 0.3,
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: ink, font: { size: 10.5 } }, grid: { color: line } },
+        y: { ticks: { color: ink, font: { size: 10.5 } }, grid: { color: line } }
+      }
+    }
+  });
+}
+
 function renderGrades(){
   const grades = state.data.grades || [];
   const homework = state.data.homework || [];
   const today = todayISO();
+  const numericGrades = grades.filter(g=> !isNaN(parseFloat(g.baho))).slice().sort((a,b)=>a.sana.localeCompare(b.sana));
   return `
+  ${numericGrades.length >= 2 ? `
+  <div class="sheet">
+    <div class="eyebrow">Baholar dinamikasi</div>
+    <canvas id="gradesChart" height="160"></canvas>
+  </div>` : ''}
   <div class="sheet">
     <div class="item-top" style="margin-bottom:2px;"><div class="eyebrow" style="margin-bottom:0;">Baholar</div><button class="btn-small" data-export="baholar">⬇ CSV</button></div>
     ${grades.length ? grades.map(g=>`
@@ -1136,6 +1210,7 @@ function renderProfile(){
       <p style="margin-bottom:2px;">${escapeHtml(u.email)}</p>
       <p>${MUASSASA_LABEL[u.muassasa]||''} ${u.sinf? '· '+escapeHtml(u.sinf) : ''} ${u.muassasaNomi?'· '+escapeHtml(u.muassasaNomi):''}</p>
       ${u.viloyat ? `<p style="margin-top:-10px;">${escapeHtml(u.viloyat)}${u.tuman?', '+escapeHtml(u.tuman):''}</p>` : ''}
+      <button class="btn-small" id="editProfileBtn">✎ Profilni tahrirlash</button>
     </div>
     ${reqs.length ? `
     <div class="sheet sheet-plum">
@@ -1184,6 +1259,7 @@ function renderProfile(){
       <div class="eyebrow">Profil</div>
       <h3 style="margin-bottom:2px;">${escapeHtml(u.ism)}</h3>
       <p>${escapeHtml(u.email)} · Ota-ona hisobi</p>
+      <button class="btn-small" id="editProfileBtn">✎ Profilni tahrirlash</button>
     </div>
     <div class="sheet">
       <div class="eyebrow">Farzand qo'shish</div>
@@ -1202,11 +1278,27 @@ function renderProfile(){
       <p>${MUASSASA_LABEL[u.muassasa]||''} · ${escapeHtml(u.muassasaNomi)}</p>
       ${u.viloyat ? `<p style="margin-top:-10px;">${escapeHtml(u.viloyat)}${u.tuman?', '+escapeHtml(u.tuman):''}</p>` : ''}
       <div class="note">O'quvchilar ro'yxatdan o'tishda "${escapeHtml(u.muassasaNomi)}" nomini kiritishsa, sizning e'lonlaringizni ko'radi.</div>
+      <button class="btn-small" id="editProfileBtn" style="margin-top:10px;">✎ Profilni tahrirlash</button>
     </div>
     <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">Chiqish</button>
     `;
   }
   return '';
+}
+
+function computeWeeklyReport(child){
+  const now = new Date();
+  const weekAgo = new Date(now); weekAgo.setDate(now.getDate()-7);
+  const weekAgoStr = weekAgo.toISOString().slice(0,10);
+  const today = todayISO();
+  const weekGrades = (child.grades||[]).filter(g=> g.sana >= weekAgoStr && g.sana <= today);
+  const numericWeek = weekGrades.filter(g=> !isNaN(parseFloat(g.baho))).map(g=>parseFloat(g.baho));
+  const avgGrade = numericWeek.length ? (numericWeek.reduce((a,b)=>a+b,0)/numericWeek.length).toFixed(1) : null;
+  const weekHw = (child.homework||[]).filter(h=> h.muddat >= weekAgoStr && h.muddat <= today);
+  const doneHw = weekHw.filter(h=>h.bajarildi).length;
+  const overdueHw = (child.homework||[]).filter(h=> !h.bajarildi && h.muddat < today).length;
+  const upcomingReminders = (child.reminders||[]).filter(r=> r.sana >= today).length;
+  return { avgGrade, gradeCount: weekGrades.length, doneHw, totalHw: weekHw.length, overdueHw, upcomingReminders };
 }
 
 function renderParentHome(){
@@ -1228,6 +1320,23 @@ function renderParentHome(){
       </div>`;
     }).join('') : `<div class="empty">${svgIcon('users')}<div>Hali farzand bog'lanmagan. Profil orqali qo'shing.</div></div>`}
   </div>
+  ${children.length ? `
+  <div class="sheet">
+    <div class="eyebrow">Haftalik hisobot (so'nggi 7 kun)</div>
+    ${children.map(c=>{
+      const r = computeWeeklyReport(c);
+      return `
+      <div class="plan-item">
+        <div class="item-title" style="margin-bottom:6px;">${escapeHtml(c.acc.ism)}</div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;">
+          <div><div style="font-family:'Fraunces',serif;font-size:18px;font-weight:600;">${r.avgGrade ?? '—'}</div><div class="item-meta">O'rtacha baho (${r.gradeCount})</div></div>
+          <div><div style="font-family:'Fraunces',serif;font-size:18px;font-weight:600;">${r.doneHw}/${r.totalHw}</div><div class="item-meta">Uy vazifasi bajarildi</div></div>
+          <div><div style="font-family:'Fraunces',serif;font-size:18px;font-weight:600;color:${r.overdueHw?'var(--alert)':'inherit'};">${r.overdueHw}</div><div class="item-meta">Kechikkan vazifa</div></div>
+          <div><div style="font-family:'Fraunces',serif;font-size:18px;font-weight:600;">${r.upcomingReminders}</div><div class="item-meta">Yaqin eslatma</div></div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>` : ''}
   ${children.length ? `<div class="sheet"><div class="eyebrow">Tezkor</div><button class="btn-small" id="goChildrenBtn">Farzandlarni boshqarish →</button></div>` : ''}
   `;
 }
@@ -1421,6 +1530,43 @@ function renderModal(){
     </div>
   </div>`;
   }
+  if(k==='editProfile'){
+    const u = state.user;
+    const opt = (v,label)=> `<option value="${v}" ${u.muassasa===v?'selected':''}>${label}</option>`;
+    return `
+  <div class="modal-wrap" id="modalWrap">
+    <div class="modal">
+      <div class="modal-head"><h3>Profilni tahrirlash</h3><button class="close-x" id="modalClose">✕</button></div>
+      <form id="editProfileForm">
+        <label>Ism va familiya</label>
+        <input type="text" name="ism" value="${escapeHtml(u.ism)}" required>
+        ${(u.role==='talaba'||u.role==='admin') ? `
+        <label>Viloyat</label>
+        <select name="viloyat" class="viloyat-select" required>
+          ${viloyatOptionsHtml(u.viloyat||'')}
+        </select>
+        <label>Tuman / shahar</label>
+        <select name="tuman" class="tuman-select" required>
+          <option value="">— Tanlang —</option>
+          ${(HUDUDLAR[u.viloyat]||[]).map(t=>`<option value="${t}" ${u.tuman===t?'selected':''}>${t}</option>`).join('')}
+        </select>
+        <label>${u.role==='talaba'?"Ta'lim muassasasi turi":'Muassasa turi'}</label>
+        <select name="muassasa" class="muassasa-turi-select" required>
+          ${opt('maktab','Maktab')}${opt('litsey','Akademik litsey')}${opt('kasb-hunar','Kasb-hunar maktabi')}${opt('universitet','Universitet / institut')}
+        </select>
+        <label>Muassasa raqami / nomi</label>
+        <input type="text" name="muassasaNomi" class="muassasa-nomi-input" value="${escapeHtml(u.muassasaNomi||'')}" required>
+        ${u.role==='talaba' ? `
+        <label>Sinf / kurs</label>
+        <input type="text" name="sinf" value="${escapeHtml(u.sinf||'')}" required>
+        ` : ''}
+        ` : ''}
+        <div id="modal-err" class="err"></div>
+        <button class="btn-primary" type="submit">Saqlash</button>
+      </form>
+    </div>
+  </div>`;
+  }
   if(k==='addChild') return `
   <div class="modal-wrap" id="modalWrap">
     <div class="modal">
@@ -1547,6 +1693,8 @@ function attachAppHandlers(){
   if(gc) gc.addEventListener('click', ()=> switchTab('p_farzandlar'));
   const lb = document.getElementById('logoutBtn');
   if(lb) lb.addEventListener('click', logout);
+  const epb = document.getElementById('editProfileBtn');
+  if(epb) epb.addEventListener('click', ()=> openModal('editProfile'));
   const mb = document.getElementById('modeBirMarta');
   if(mb) mb.addEventListener('click', ()=> setReminderMode('bir_marta'));
   const mh = document.getElementById('modeHarDars');
@@ -1617,6 +1765,24 @@ function attachAppHandlers(){
   if(gf) gf.addEventListener('submit', addGrade);
   const hwf = document.getElementById('homeworkForm');
   if(hwf) hwf.addEventListener('submit', addHomework);
+  const epf = document.getElementById('editProfileForm');
+  if(epf) epf.addEventListener('submit', handleEditProfileSubmit);
+  initGradesChart();
+  document.querySelectorAll('.viloyat-select').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      const tumanSel = sel.closest('form').querySelector('.tuman-select');
+      const list = HUDUDLAR[sel.value] || [];
+      tumanSel.innerHTML = '<option value="">— Tanlang —</option>' + list.map(t=>`<option value="${t}">${t}</option>`).join('');
+    });
+  });
+  document.querySelectorAll('.muassasa-turi-select').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      const form = sel.closest('form');
+      const nomiInput = form.querySelector('.muassasa-nomi-input');
+      const h = MUASSASA_HINTS[sel.value] || MUASSASA_HINTS.maktab;
+      if(nomiInput) nomiInput.placeholder = h.ph;
+    });
+  });
   const acf = document.getElementById('addChildForm');
   if(acf) acf.addEventListener('submit', sendLinkRequest);
   const ppf = document.getElementById('parentPlanForm');
