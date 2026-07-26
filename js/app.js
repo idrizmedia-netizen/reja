@@ -7,7 +7,7 @@ let state = {
   theme: 'light',
   user: null,
   tab: 'bosh',
-  data: { schedule: [], plans: [], reminders: [] },
+  data: { schedule: [], plans: [], reminders: [], grades: [], homework: [] },
   parentData: { children: [], requests: [], unreadByEmail: {} },
   adminData: { announcements: [] },
   toast: null,
@@ -36,12 +36,16 @@ function subtractMinutes(hm, mins){
 }
 
 async function boot(){
-  if(sessionMem){
-    const acc = await sGet('account:'+sanitizeKey(sessionMem));
-    if(acc){ await loginAs(acc); return; }
-  }
-  state.view = 'auth';
-  render();
+  _auth.onAuthStateChanged(async (fbUser)=>{
+    if(fbUser && fbUser.email){
+      const acc = await sGet('account:'+sanitizeKey(fbUser.email));
+      if(acc){ await loginAs(acc); return; }
+    }
+    if(state.view !== 'app'){
+      state.view = 'auth';
+      render();
+    }
+  });
 }
 
 async function loginAs(acc){
@@ -49,15 +53,19 @@ async function loginAs(acc){
   state.theme = acc.theme || 'light';
   sessionMem = acc.email;
   if(acc.role === 'talaba'){
-    const [sc, pl, rm, reqs] = await Promise.all([
+    const [sc, pl, rm, reqs, gr, hw] = await Promise.all([
       sGet('schedule:'+sanitizeKey(acc.email)),
       sGet('plans:'+sanitizeKey(acc.email)),
       sGet('reminders:'+sanitizeKey(acc.email)),
-      sGet('link_requests:'+sanitizeKey(acc.email))
+      sGet('link_requests:'+sanitizeKey(acc.email)),
+      sGet('grades:'+sanitizeKey(acc.email)),
+      sGet('homework:'+sanitizeKey(acc.email))
     ]);
     state.data.schedule = sc || [];
     state.data.plans = pl || [];
     state.data.reminders = rm || [];
+    state.data.grades = gr || [];
+    state.data.homework = hw || [];
     state.parentData.requests = (reqs||[]).filter(r=>r.status==='pending');
     state.parentData.linkedParents = await sGet('links_child:'+sanitizeKey(acc.email)) || [];
     await computeUnread(state.parentData.linkedParents, 'child');
@@ -122,7 +130,9 @@ async function saveAll(){
   await Promise.all([
     sSet('schedule:'+e, state.data.schedule),
     sSet('plans:'+e, state.data.plans),
-    sSet('reminders:'+e, state.data.reminders)
+    sSet('reminders:'+e, state.data.reminders),
+    sSet('grades:'+e, state.data.grades),
+    sSet('homework:'+e, state.data.homework)
   ]);
 }
 
@@ -201,12 +211,9 @@ async function handleRegister(e){
   const parol = f.parol.value;
   const role = state.authRole;
   const errBox = document.getElementById('auth-err');
-  if(!ism || !email || parol.length < 4){ errBox.textContent = "Ism, email va kamida 4 belgili parolni to'ldiring."; return; }
-  const key = 'account:'+sanitizeKey(email);
-  const exists = await sGet(key);
-  if(exists){ errBox.textContent = "Bu email allaqachon ro'yxatdan o'tgan. Kirish qiling."; return; }
+  if(!ism || !email || parol.length < 6){ errBox.textContent = "Ism, email va kamida 6 belgili parolni to'ldiring."; return; }
 
-  let acc = { ism, email, parol: b64(parol), role, reminderMode: 'bir_marta', createdAt: Date.now() };
+  let acc = { ism, email, role, authProvider: 'password', reminderMode: 'bir_marta', createdAt: Date.now() };
   if(role === 'talaba' || role === 'admin'){
     const viloyat = f.viloyat.value;
     const tuman = f.tuman.value;
@@ -224,7 +231,13 @@ async function handleRegister(e){
       if(!acc.muassasaNomi){ errBox.textContent = "Muassasa raqami/nomini kiriting."; return; }
     }
   }
-  await sSet(key, acc);
+  try{
+    await fbRegister(email, parol);
+  }catch(err){
+    errBox.textContent = fbErrorToUzbek(err);
+    return;
+  }
+  await sSet('account:'+sanitizeKey(email), acc);
   await loginAs(acc);
 }
 
@@ -235,22 +248,48 @@ async function handleLogin(e){
   const parol = f.parol.value;
   const errBox = document.getElementById('auth-err');
   if(email === OWNER_EMAIL){ window.location.href = 'admin.html'; return; }
+  try{
+    await fbLogin(email, parol);
+  }catch(err){
+    errBox.textContent = fbErrorToUzbek(err);
+    return;
+  }
   const acc = await sGet('account:'+sanitizeKey(email));
-  if(!acc){ errBox.textContent = "Email yoki parol noto'g'ri."; return; }
-  if(!acc.parol){ errBox.textContent = "Bu hisob faqat Google orqali kiradi — yuqoridagi Google tugmasini bosing."; return; }
-  if(acc.parol !== b64(parol)){ errBox.textContent = "Email yoki parol noto'g'ri."; return; }
+  if(!acc){ errBox.textContent = "Profil ma'lumotlari topilmadi. Iltimos, qo'llab-quvvatlash bilan bog'laning."; return; }
   await loginAs(acc);
 }
 
-async function handleGoogleCredential(payload){
-  const email = (payload.email||'').trim().toLowerCase();
-  if(email === OWNER_EMAIL){ window.location.href = 'admin.html'; return; }
-  const acc = await sGet('account:'+sanitizeKey(email));
-  if(acc){ await loginAs(acc); return; }
-  state.pendingGoogle = { ism: payload.name || email.split('@')[0], email };
-  state.authMode = 'google_complete';
-  state.authRole = 'talaba';
-  render();
+async function handleForgotPassword(e){
+  e.preventDefault();
+  const f = e.target;
+  const email = f.femail.value.trim().toLowerCase();
+  const errBox = document.getElementById('auth-err');
+  if(!email){ errBox.textContent = "Emailingizni kiriting."; return; }
+  try{
+    await fbSendPasswordReset(email);
+    state.authMode = 'login';
+    render();
+    showToast("Parolni tiklash havolasi " + email + " manziliga yuborildi.");
+  }catch(err){
+    errBox.textContent = fbErrorToUzbek(err);
+  }
+}
+
+async function handleGoogleSignInClick(){
+  const errBox = document.getElementById('auth-err');
+  try{
+    const result = await fbGoogleSignIn();
+    const email = (result.user.email||'').trim().toLowerCase();
+    if(email === OWNER_EMAIL){ window.location.href = 'admin.html'; return; }
+    const acc = await sGet('account:'+sanitizeKey(email));
+    if(acc){ await loginAs(acc); return; }
+    state.pendingGoogle = { ism: result.user.displayName || email.split('@')[0], email };
+    state.authMode = 'google_complete';
+    state.authRole = 'talaba';
+    render();
+  }catch(err){
+    if(errBox) errBox.textContent = fbErrorToUzbek(err);
+  }
 }
 
 async function handleGoogleCompleteSubmit(e){
@@ -260,7 +299,7 @@ async function handleGoogleCompleteSubmit(e){
   const pg = state.pendingGoogle;
   const errBox = document.getElementById('auth-err');
   const key = 'account:'+sanitizeKey(pg.email);
-  let acc = { ism: pg.ism, email: pg.email, parol: null, authProvider: 'google', role, reminderMode: 'bir_marta', createdAt: Date.now() };
+  let acc = { ism: pg.ism, email: pg.email, authProvider: 'google', role, reminderMode: 'bir_marta', createdAt: Date.now() };
   if(role === 'talaba' || role === 'admin'){
     const viloyat = f.g_viloyat.value;
     const tuman = f.g_tuman.value;
@@ -284,6 +323,7 @@ async function handleGoogleCompleteSubmit(e){
 }
 
 function logout(){
+  _auth.signOut().catch(()=>{});
   sessionMem = null;
   if(engineTimer) clearInterval(engineTimer);
   state.user = null;
@@ -379,6 +419,93 @@ async function addReminder(e){
 async function delReminder(id){
   state.data.reminders = state.data.reminders.filter(r=>r.id!==id);
   await saveAll(); render();
+}
+
+async function addGrade(e){
+  e.preventDefault();
+  const f = e.target;
+  const fan = f.fan.value.trim();
+  const baho = f.baho.value;
+  const sana = f.sana.value;
+  const izoh = f.izoh.value.trim();
+  const editId = state.modal.editId;
+  if(!fan || !baho || !sana){ document.getElementById('modal-err').textContent = "Fan, baho va sanani kiriting."; return; }
+  if(editId){
+    const g = state.data.grades.find(x=>x.id===editId);
+    if(g) Object.assign(g, { fan, baho, sana, izoh });
+  } else {
+    state.data.grades.push({ id: uid(), fan, baho, sana, izoh });
+  }
+  state.data.grades.sort((a,b)=> b.sana.localeCompare(a.sana));
+  await saveAll();
+  closeModal();
+  showToast(editId ? "Baho yangilandi." : "Baho qo'shildi.");
+}
+async function delGrade(id){
+  state.data.grades = state.data.grades.filter(g=>g.id!==id);
+  await saveAll(); render();
+}
+
+async function addHomework(e){
+  e.preventDefault();
+  const f = e.target;
+  const fan = f.fan.value.trim();
+  const matn = f.matn.value.trim();
+  const muddat = f.muddat.value;
+  const editId = state.modal.editId;
+  if(!fan || !matn || !muddat){ document.getElementById('modal-err').textContent = "Fan, vazifa va muddatni kiriting."; return; }
+  if(editId){
+    const hw = state.data.homework.find(x=>x.id===editId);
+    if(hw) Object.assign(hw, { fan, matn, muddat });
+  } else {
+    state.data.homework.push({ id: uid(), fan, matn, muddat, bajarildi: false });
+  }
+  state.data.homework.sort((a,b)=> a.muddat.localeCompare(b.muddat));
+  await saveAll();
+  closeModal();
+  showToast(editId ? "Uy vazifasi yangilandi." : "Uy vazifasi qo'shildi.");
+}
+async function toggleHomework(id){
+  const hw = state.data.homework.find(x=>x.id===id);
+  if(hw){ hw.bajarildi = !hw.bajarildi; await saveAll(); render(); }
+}
+async function delHomework(id){
+  state.data.homework = state.data.homework.filter(h=>h.id!==id);
+  await saveAll(); render();
+}
+
+function downloadCSV(filename, rows){
+  const csv = rows.map(r=> r.map(cell=>{
+    const s = String(cell==null?'':cell).replace(/"/g,'""');
+    return /[",\n]/.test(s) ? `"${s}"` : s;
+  }).join(',')).join('\r\n');
+  const blob = new Blob(['\uFEFF'+csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportCSV(kind){
+  if(kind==='jadval'){
+    const rows = [['Fan','Boshlanish','Tugash','Xona','Kunlar']];
+    state.data.schedule.forEach(l=> rows.push([l.fan, l.boshlanish, l.tugash||'', l.xona||'', l.kunlar.map(i=>KUN_FULL[i]).join(' ')]));
+    downloadCSV('dars-jadvali.csv', rows);
+  } else if(kind==='rejalar'){
+    const rows = [['Turi','Nomi','Sana','Izoh']];
+    state.data.plans.forEach(p=> rows.push([p.turi, p.nom, p.sana, p.izoh||'']));
+    downloadCSV('rejalar.csv', rows);
+  } else if(kind==='eslatma'){
+    const rows = [['Matn','Sana','Vaqt','Takrorlanish']];
+    state.data.reminders.forEach(r=> rows.push([r.matn, r.sana, r.vaqt, r.takrorlanish]));
+    downloadCSV('eslatmalar.csv', rows);
+  } else if(kind==='baholar'){
+    const rows = [['Fan','Baho','Sana','Izoh']];
+    state.data.grades.forEach(g=> rows.push([g.fan, g.baho, g.sana, g.izoh||'']));
+    downloadCSV('baholar.csv', rows);
+  }
+  showToast("Fayl yuklab olindi.");
 }
 
 async function setReminderMode(mode){
@@ -587,11 +714,19 @@ function viloyatOptionsHtml(selected){
   ).join('');
 }
 
+const MUASSASA_HINTS = {
+  'maktab': { ph: "Masalan: 28-maktab", hint: "Format: <raqam>-maktab. Masalan: 28-maktab, 145-maktab." },
+  'litsey': { ph: "Masalan: 3-akademik litsey", hint: "Format: <raqam>-akademik litsey yoki aniq nomi. Masalan: 3-akademik litsey, «Ijod» IT-litseyi." },
+  'kasb-hunar': { ph: "Masalan: 5-kasb-hunar maktabi", hint: "Format: <raqam>-kasb-hunar maktabi yoki to'liq nomi. Masalan: 5-kasb-hunar maktabi, Toshkent temir yo'l kolleji." },
+  'universitet': { ph: "Masalan: TATU yoki Milliy universitet", hint: "To'liq nomi yoki keng tarqalgan qisqartmasini yozing. Masalan: TATU, TDIU, Milliy universitet." }
+};
+
 function institutionFieldsHtml(role, prefix){
   if(role !== 'talaba' && role !== 'admin') return '';
   const label = role === 'talaba' ? 'Ta\'lim muassasasi turi' : 'Muassasa turi';
   const selName = role === 'talaba' ? 'muassasa' : 'muassasaAdmin';
   const nomiName = role === 'talaba' ? 'muassasaNomi' : 'muassasaNomiAdmin';
+  const h = MUASSASA_HINTS.maktab;
   return `
     <label>Viloyat</label>
     <select name="${prefix}viloyat" class="viloyat-select" required>
@@ -602,19 +737,20 @@ function institutionFieldsHtml(role, prefix){
       <option value="">— Avval viloyatni tanlang —</option>
     </select>
     <label>${label}</label>
-    <select name="${selName}" required>
+    <select name="${selName}" class="muassasa-turi-select" required>
       <option value="maktab">Maktab</option>
       <option value="litsey">Akademik litsey</option>
       <option value="kasb-hunar">Kasb-hunar maktabi</option>
       <option value="universitet">Universitet / institut</option>
     </select>
     <label>Muassasa raqami / nomi</label>
-    <input type="text" name="${nomiName}" placeholder="Masalan: 28-maktab" required>
+    <input type="text" name="${nomiName}" class="muassasa-nomi-input" placeholder="${h.ph}" required>
+    <div class="note muassasa-hint" style="margin-top:-8px;">${h.hint}</div>
     ${role==='talaba' ? `
     <label>Sinf / kurs</label>
     <input type="text" name="sinf" placeholder="Masalan: 9-sinf yoki 2-kurs" required>
     ` : `
-    <div class="note" style="margin-top:8px;">O'quvchilaringiz ro'yxatdan o'tishda xuddi shu viloyat, tuman va muassasa raqamini kiritishi kerak — shundagina e'lonlaringizni ko'rishadi.</div>
+    <div class="note" style="margin-top:8px;">O'quvchilaringiz ro'yxatdan o'tishda xuddi shu viloyat, tuman va muassasa raqami/nomini <strong>harfma-harf bir xil</strong> kiritishi kerak — shundagina e'lonlaringizni ko'rishadi.</div>
     `}
   `;
 }
@@ -622,6 +758,7 @@ function institutionFieldsHtml(role, prefix){
 function renderAuth(){
   const isLogin = state.authMode === 'login';
   const isGoogleComplete = state.authMode === 'google_complete';
+  const isForgot = state.authMode === 'forgot';
   const role = state.authRole;
   const pg = state.pendingGoogle || {};
   return `
@@ -648,11 +785,27 @@ function renderAuth(){
       </form>
       <button class="btn-ghost" id="cancelGoogleComplete" style="margin-top:12px;">← Bekor qilish</button>
     </div>
+    ` : isForgot ? `
+    <div class="sheet sheet-ruled">
+      <div class="eyebrow">Parolni tiklash</div>
+      <p>Ro'yxatdan o'tgan emailingizni kiriting — parolni tiklash havolasini yuboramiz.</p>
+      <form id="forgotForm">
+        <label>Email</label>
+        <input type="email" name="femail" placeholder="ism@misol.uz" required>
+        <div id="auth-err" class="err"></div>
+        <button class="btn-primary" type="submit">Havola yuborish</button>
+      </form>
+      <button class="btn-ghost" id="cancelForgot" style="margin-top:12px;">← Kirish sahifasiga qaytish</button>
+    </div>
     ` : `
     <div class="sheet sheet-ruled">
       <div class="eyebrow">${isLogin? 'Kirish' : "Ro'yxatdan o'tish"}</div>
-      ${isLogin ? `<div id="googleSigninContainer" style="margin-bottom:14px;display:flex;justify-content:center;"></div>
-      <div style="text-align:center;color:var(--ink-soft);font-size:11.5px;margin:-6px 0 14px;">— yoki email bilan —</div>` : ''}
+      ${isLogin ? `
+      <button type="button" id="googleSigninBtn" class="btn-primary" style="background:#fff;color:#3c4043;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:10px;margin-top:0;">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.2-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 16 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3 16 3 9.1 7.6 6.3 14.7z"/><path fill="#4CAF50" d="M24 45c5.5 0 10.4-1.9 14.2-5.1l-6.6-5.4C29.6 36.3 27 37 24 37c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9 40.4 15.9 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.3-4.1 5.8l6.6 5.4C41.6 36 45 30.5 45 24c0-1.2-.1-2.4-.4-3.5z"/></svg>
+        Google orqali kirish
+      </button>
+      <div style="text-align:center;color:var(--ink-soft);font-size:11.5px;margin:14px 0;">— yoki email bilan —</div>` : ''}
       ${isLogin ? `
       <form id="loginForm">
         <label>Email</label>
@@ -662,7 +815,8 @@ function renderAuth(){
         <div id="auth-err" class="err"></div>
         <button class="btn-primary" type="submit">Kirish</button>
       </form>
-      <button class="btn-ghost" id="toRegister" style="margin-top:12px;">Hisobingiz yo'qmi? Ro'yxatdan o'ting</button>
+      <button class="btn-ghost" id="toForgot" style="margin-top:10px;">Parolni unutdingizmi?</button>
+      <button class="btn-ghost" id="toRegister" style="margin-top:2px;display:block;">Hisobingiz yo'qmi? Ro'yxatdan o'ting</button>
       ` : `
       <label style="margin-top:0;">Kim sifatida ro'yxatdan o'tasiz?</label>
       <div class="segrow">
@@ -676,14 +830,14 @@ function renderAuth(){
         <label>Email</label>
         <input type="email" name="email" placeholder="ism@misol.uz" required>
         <label>Parol</label>
-        <input type="password" name="parol" placeholder="Kamida 4 ta belgi" required>
+        <input type="password" name="parol" placeholder="Kamida 6 ta belgi" required minlength="6">
         ${institutionFieldsHtml(role, '')}
         <div id="auth-err" class="err"></div>
         <button class="btn-primary" type="submit">Ro'yxatdan o'tish</button>
       </form>
       <button class="btn-ghost" id="toLogin" style="margin-top:12px;">Hisobingiz bormi? Kiring</button>
       `}
-      <div class="note">Bu — dastlabki versiya (prototip). Ma'lumotlar oddiy bulutli xotirada saqlanadi, bank darajasidagi shifrlash emas — shuning uchun juda maxfiy parol ishlatmang.</div>
+      <div class="note">Kirish va ro'yxatdan o'tish Firebase Authentication orqali xavfsiz tarzda amalga oshiriladi.</div>
     </div>
     `}
   </div>`;
@@ -693,13 +847,21 @@ function attachAuthHandlers(){
   const lf = document.getElementById('loginForm');
   const rf = document.getElementById('registerForm');
   const gcf = document.getElementById('googleCompleteForm');
+  const ff = document.getElementById('forgotForm');
   if(lf) lf.addEventListener('submit', handleLogin);
   if(rf) rf.addEventListener('submit', handleRegister);
   if(gcf) gcf.addEventListener('submit', handleGoogleCompleteSubmit);
+  if(ff) ff.addEventListener('submit', handleForgotPassword);
+  const gsb = document.getElementById('googleSigninBtn');
+  if(gsb) gsb.addEventListener('click', handleGoogleSignInClick);
   const tr = document.getElementById('toRegister');
   const tl = document.getElementById('toLogin');
   if(tr) tr.addEventListener('click', ()=>{ state.authMode='register'; render(); });
   if(tl) tl.addEventListener('click', ()=>{ state.authMode='login'; render(); });
+  const tf = document.getElementById('toForgot');
+  if(tf) tf.addEventListener('click', ()=>{ state.authMode='forgot'; render(); });
+  const cf = document.getElementById('cancelForgot');
+  if(cf) cf.addEventListener('click', ()=>{ state.authMode='login'; render(); });
   const cgc = document.getElementById('cancelGoogleComplete');
   if(cgc) cgc.addEventListener('click', ()=>{ state.authMode='login'; state.pendingGoogle=null; render(); });
   document.querySelectorAll('.role-btn').forEach(b=> b.addEventListener('click', ()=> setAuthRole(b.dataset.role)));
@@ -710,11 +872,18 @@ function attachAuthHandlers(){
       tumanSel.innerHTML = '<option value="">— Tanlang —</option>' + list.map(t=>`<option value="${t}">${t}</option>`).join('');
     });
   });
+  document.querySelectorAll('.muassasa-turi-select').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      const form = sel.closest('form');
+      const nomiInput = form.querySelector('.muassasa-nomi-input');
+      const hintDiv = form.querySelector('.muassasa-hint');
+      const h = MUASSASA_HINTS[sel.value] || MUASSASA_HINTS.maktab;
+      if(nomiInput) nomiInput.placeholder = h.ph;
+      if(hintDiv) hintDiv.textContent = h.hint;
+    });
+  });
   const ttb = document.getElementById('themeToggleBtn');
   if(ttb) ttb.addEventListener('click', toggleTheme);
-  if(state.authMode === 'login' && document.getElementById('googleSigninContainer')){
-    renderGoogleButton('googleSigninContainer', handleGoogleCredential);
-  }
 }
 
 function renderApp(){
@@ -758,6 +927,7 @@ function renderTabs(){
       <button class="tab ${state.tab==='jadval'?'active':''}" data-tab="jadval">${svgIcon('cal')}<span>Jadval</span></button>
       <button class="tab ${state.tab==='rejalar'?'active':''}" data-tab="rejalar">${svgIcon('plan')}<span>Rejalar</span></button>
       <button class="tab ${state.tab==='eslatma'?'active':''}" data-tab="eslatma">${svgIcon('bell')}<span>Eslatmalar</span></button>
+      <button class="tab ${state.tab==='baholar'?'active':''}" data-tab="baholar">${svgIcon('grade')}<span>Baholar</span></button>
       <button class="tab ${state.tab==='profil'?'active':''}" data-tab="profil">${hasDot?'<span class="dot"></span>':''}${svgIcon('user')}<span>Profil</span></button>
     </div>`;
   }
@@ -787,6 +957,7 @@ function renderTabContent(){
     if(state.tab==='jadval') return renderSchedule();
     if(state.tab==='rejalar') return renderPlans();
     if(state.tab==='eslatma') return renderReminders();
+    if(state.tab==='baholar') return renderGrades();
     if(state.tab==='profil') return renderProfile();
   }
   if(r==='ota_ona'){
@@ -853,7 +1024,7 @@ function renderSchedule(){
   const grouped = KUN_FULL.map((name,i)=> ({ name, i, lessons: state.data.schedule.filter(l=>l.kunlar.includes(i)).sort((a,b)=>a.boshlanish.localeCompare(b.boshlanish)) }));
   return `
   <div class="sheet">
-    <div class="eyebrow">Haftalik dars jadvali</div>
+    <div class="item-top" style="margin-bottom:2px;"><div class="eyebrow" style="margin-bottom:0;">Haftalik dars jadvali</div><button class="btn-small" data-export="jadval">⬇ CSV</button></div>
     ${grouped.map(g=> g.lessons.length ? `
       <div style="margin-bottom:14px;">
         <div style="font-weight:600;font-size:13.5px;color:var(--accent-deep);margin-bottom:4px;">${g.name}</div>
@@ -873,7 +1044,7 @@ function renderSchedule(){
 function renderPlans(){
   return `
   <div class="sheet">
-    <div class="eyebrow">Kunlik / oylik / yillik rejalar</div>
+    <div class="item-top" style="margin-bottom:2px;"><div class="eyebrow" style="margin-bottom:0;">Kunlik / oylik / yillik rejalar</div><button class="btn-small" data-export="rejalar">⬇ CSV</button></div>
     ${state.data.plans.length ? state.data.plans.map(p=>`
       <div class="plan-item">
         <div class="item-top">
@@ -892,7 +1063,7 @@ function renderPlans(){
 function renderReminders(){
   return `
   <div class="sheet">
-    <div class="eyebrow">Eslatmalar</div>
+    <div class="item-top" style="margin-bottom:2px;"><div class="eyebrow" style="margin-bottom:0;">Eslatmalar</div><button class="btn-small" data-export="eslatma">⬇ CSV</button></div>
     ${state.data.reminders.length ? state.data.reminders.map(r=>`
       <div class="rem-item">
         <div class="item-top">
@@ -906,6 +1077,51 @@ function renderReminders(){
       </div>
     `).join('') : `<div class="empty">${svgIcon('bell')}<div>Hali eslatma qo'yilmagan.</div></div>`}
   </div>`;
+}
+
+function renderGrades(){
+  const grades = state.data.grades || [];
+  const homework = state.data.homework || [];
+  const today = todayISO();
+  return `
+  <div class="sheet">
+    <div class="item-top" style="margin-bottom:2px;"><div class="eyebrow" style="margin-bottom:0;">Baholar</div><button class="btn-small" data-export="baholar">⬇ CSV</button></div>
+    ${grades.length ? grades.map(g=>`
+      <div class="plan-item">
+        <div class="item-top">
+          <div><div class="item-title">${escapeHtml(g.fan)}</div><div class="item-meta">${fmtDate(g.sana)} ${g.izoh?'· '+escapeHtml(g.izoh):''}</div></div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="badge rep">${escapeHtml(g.baho)}</span>
+            <button class="del" data-edit-grade="${g.id}" title="Tahrirlash">✎</button>
+            <button class="del" data-del-grade="${g.id}">✕</button>
+          </div>
+        </div>
+      </div>
+    `).join('') : `<div class="empty">${svgIcon('grade')}<div>Hali baho kiritilmagan.</div></div>`}
+    <button class="btn-small btn-accent" id="addGradeBtn" style="margin-top:10px;">+ Baho qo'shish</button>
+  </div>
+  <div class="sheet sheet-plum">
+    <div class="eyebrow">Uy vazifalari</div>
+    ${homework.length ? homework.map(h=>`
+      <div class="plan-item">
+        <div class="item-top">
+          <div style="display:flex;gap:10px;align-items:flex-start;">
+            <input type="checkbox" data-toggle-hw="${h.id}" ${h.bajarildi?'checked':''} style="margin-top:4px;width:16px;height:16px;">
+            <div>
+              <div class="item-title" style="${h.bajarildi?'text-decoration:line-through;opacity:0.6;':''}">${escapeHtml(h.fan)} — ${escapeHtml(h.matn)}</div>
+              <div class="item-meta">Muddat: ${fmtDate(h.muddat)} ${(!h.bajarildi && h.muddat < today) ? '· <span style="color:var(--alert);font-weight:700;">kechikkan</span>' : ''}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button class="del" data-edit-homework="${h.id}" title="Tahrirlash">✎</button>
+            <button class="del" data-del-homework="${h.id}">✕</button>
+          </div>
+        </div>
+      </div>
+    `).join('') : `<div class="empty">${svgIcon('plan')}<div>Hali uy vazifasi kiritilmagan.</div></div>`}
+    <button class="btn-small btn-plum" id="addHomeworkBtn" style="margin-top:10px;">+ Uy vazifasi qo'shish</button>
+  </div>
+  `;
 }
 
 function renderProfile(){
@@ -1163,6 +1379,48 @@ function renderModal(){
     </div>
   </div>`;
   }
+  if(k==='grade'){
+    const editing = !!state.modal.editId;
+    const g = editing ? state.data.grades.find(x=>x.id===state.modal.editId) : null;
+    return `
+  <div class="modal-wrap" id="modalWrap">
+    <div class="modal">
+      <div class="modal-head"><h3>${editing?"Bahoni tahrirlash":"Baho qo'shish"}</h3><button class="close-x" id="modalClose">✕</button></div>
+      <form id="gradeForm">
+        <label>Fan nomi</label>
+        <input type="text" name="fan" placeholder="Masalan: Matematika" value="${g?escapeHtml(g.fan):''}" required>
+        <label>Baho</label>
+        <input type="text" name="baho" placeholder="Masalan: 5 yoki 92%" value="${g?escapeHtml(g.baho):''}" required>
+        <label>Sana</label>
+        <input type="date" name="sana" value="${g?g.sana:todayISO()}" required>
+        <label>Izoh (ixtiyoriy)</label>
+        <input type="text" name="izoh" placeholder="Masalan: nazorat ishi" value="${g&&g.izoh?escapeHtml(g.izoh):''}">
+        <div id="modal-err" class="err"></div>
+        <button class="btn-primary" type="submit">${editing?'Yangilash':'Saqlash'}</button>
+      </form>
+    </div>
+  </div>`;
+  }
+  if(k==='homework'){
+    const editing = !!state.modal.editId;
+    const h = editing ? state.data.homework.find(x=>x.id===state.modal.editId) : null;
+    return `
+  <div class="modal-wrap" id="modalWrap">
+    <div class="modal">
+      <div class="modal-head"><h3>${editing?"Uy vazifasini tahrirlash":"Uy vazifasi qo'shish"}</h3><button class="close-x" id="modalClose">✕</button></div>
+      <form id="homeworkForm">
+        <label>Fan nomi</label>
+        <input type="text" name="fan" placeholder="Masalan: Ona tili" value="${h?escapeHtml(h.fan):''}" required>
+        <label>Vazifa</label>
+        <input type="text" name="matn" placeholder="Masalan: 45-mashq" value="${h?escapeHtml(h.matn):''}" required>
+        <label>Topshirish muddati</label>
+        <input type="date" name="muddat" value="${h?h.muddat:''}" required>
+        <div id="modal-err" class="err"></div>
+        <button class="btn-primary" type="submit">${editing?'Yangilash':'Saqlash'}</button>
+      </form>
+    </div>
+  </div>`;
+  }
   if(k==='addChild') return `
   <div class="modal-wrap" id="modalWrap">
     <div class="modal">
@@ -1301,6 +1559,16 @@ function attachAppHandlers(){
   document.querySelectorAll('[data-del-lesson]').forEach(b=> b.addEventListener('click', ()=> delLesson(b.dataset.delLesson)));
   document.querySelectorAll('[data-del-plan]').forEach(b=> b.addEventListener('click', ()=> delPlan(b.dataset.delPlan)));
   document.querySelectorAll('[data-del-reminder]').forEach(b=> b.addEventListener('click', ()=> delReminder(b.dataset.delReminder)));
+  const agb = document.getElementById('addGradeBtn');
+  if(agb) agb.addEventListener('click', ()=> openModal('grade'));
+  const ahb = document.getElementById('addHomeworkBtn');
+  if(ahb) ahb.addEventListener('click', ()=> openModal('homework'));
+  document.querySelectorAll('[data-edit-grade]').forEach(b=> b.addEventListener('click', ()=> openModal('grade', { editId: b.dataset.editGrade })));
+  document.querySelectorAll('[data-del-grade]').forEach(b=> b.addEventListener('click', ()=> delGrade(b.dataset.delGrade)));
+  document.querySelectorAll('[data-edit-homework]').forEach(b=> b.addEventListener('click', ()=> openModal('homework', { editId: b.dataset.editHomework })));
+  document.querySelectorAll('[data-del-homework]').forEach(b=> b.addEventListener('click', ()=> delHomework(b.dataset.delHomework)));
+  document.querySelectorAll('[data-toggle-hw]').forEach(b=> b.addEventListener('change', ()=> toggleHomework(b.dataset.toggleHw)));
+  document.querySelectorAll('[data-export]').forEach(b=> b.addEventListener('click', ()=> exportCSV(b.dataset.export)));
   document.querySelectorAll('[data-del-announcement]').forEach(b=> b.addEventListener('click', ()=> delAnnouncement(b.dataset.delAnnouncement)));
   document.querySelectorAll('[data-edit-lesson]').forEach(b=> b.addEventListener('click', ()=> openModal('lesson', { editId: b.dataset.editLesson })));
   document.querySelectorAll('[data-edit-plan]').forEach(b=> b.addEventListener('click', ()=> openModal('plan', { editId: b.dataset.editPlan })));
@@ -1345,6 +1613,10 @@ function attachAppHandlers(){
   if(pf) pf.addEventListener('submit', addPlan);
   const rf = document.getElementById('reminderForm');
   if(rf) rf.addEventListener('submit', addReminder);
+  const gf = document.getElementById('gradeForm');
+  if(gf) gf.addEventListener('submit', addGrade);
+  const hwf = document.getElementById('homeworkForm');
+  if(hwf) hwf.addEventListener('submit', addHomework);
   const acf = document.getElementById('addChildForm');
   if(acf) acf.addEventListener('submit', sendLinkRequest);
   const ppf = document.getElementById('parentPlanForm');
