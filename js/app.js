@@ -5,6 +5,7 @@ let state = {
   authMode: 'login',
   authRole: 'talaba',
   theme: 'light',
+  lang: 'uz',
   user: null,
   tab: 'bosh',
   data: { schedule: [], plans: [], reminders: [], grades: [], homework: [] },
@@ -51,6 +52,7 @@ async function boot(){
 async function loginAs(acc){
   state.user = acc;
   state.theme = acc.theme || 'light';
+  state.lang = acc.lang || 'uz';
   sessionMem = acc.email;
   if(acc.role === 'talaba'){
     const [sc, pl, rm, reqs, gr, hw] = await Promise.all([
@@ -728,15 +730,29 @@ async function postAnnouncement(e){
   const f = e.target;
   const matn = f.matn.value.trim();
   const errBox = document.getElementById('modal-err');
+  const progressBox = document.getElementById('upload-progress');
   if(!matn){ errBox.textContent = "E'lon matnini kiriting."; return; }
   const key = 'announcements:'+institutionKey(state.user);
   const editId = state.modal.editId;
   let list = await sGet(key) || [];
+  let rasmUrl = null;
+  const file = f.rasm.files[0];
+  if(file){
+    try{
+      if(progressBox) progressBox.textContent = "Rasm yuklanmoqda...";
+      const path = 'announcements/'+institutionKey(state.user)+'/'+uid()+'-'+file.name;
+      rasmUrl = await uploadImage(path, file);
+    }catch(err){
+      errBox.textContent = err.message || "Rasmni yuklashda xatolik.";
+      if(progressBox) progressBox.textContent = '';
+      return;
+    }
+  }
   if(editId){
     const a = list.find(x=>x.id===editId);
-    if(a) a.matn = matn;
+    if(a){ a.matn = matn; if(rasmUrl) a.rasmUrl = rasmUrl; }
   } else {
-    list.unshift({ id: uid(), matn, sana: todayISO(), adminName: state.user.ism });
+    list.unshift({ id: uid(), matn, sana: todayISO(), adminName: state.user.ism, rasmUrl: rasmUrl || null });
   }
   await sSet(key, list);
   state.adminData.announcements = list;
@@ -818,8 +834,9 @@ function renderAuth(){
     <div style="display:flex;justify-content:space-between;align-items:flex-start;">
       <div class="brand" style="font-size:26px;margin-bottom:2px;">Re<em>ja</em></div>
       <button class="theme-toggle" id="themeToggleBtn" title="Kun/tun rejimi">${svgIcon(state.theme==='dark'?'sun':'moon')}</button>
+      <button class="theme-toggle" id="langToggleBtn" title="Til / Язык / Language" style="width:auto;padding:0 10px;font-size:11px;font-weight:700;">${(state.lang||'uz').toUpperCase()}</button>
     </div>
-    <p style="margin-bottom:24px;">Dars jadvali, rejalar, eslatmalar — va oila bilan bog'lanish, bir joyda.</p>
+    <p style="margin-bottom:24px;">${t('tagline')}</p>
     ${isGoogleComplete ? `
     <div class="sheet sheet-plum">
       <div class="eyebrow">Ro'yxatni yakunlang</div>
@@ -851,11 +868,11 @@ function renderAuth(){
     </div>
     ` : `
     <div class="sheet sheet-ruled">
-      <div class="eyebrow">${isLogin? 'Kirish' : "Ro'yxatdan o'tish"}</div>
+      <div class="eyebrow">${isLogin? t('kirish') : t('royxatdan_otish')}</div>
       ${isLogin ? `
       <button type="button" id="googleSigninBtn" class="btn-primary" style="background:#fff;color:#3c4043;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:10px;margin-top:0;">
         <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.2-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 16 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3 16 3 9.1 7.6 6.3 14.7z"/><path fill="#4CAF50" d="M24 45c5.5 0 10.4-1.9 14.2-5.1l-6.6-5.4C29.6 36.3 27 37 24 37c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9 40.4 15.9 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.3-4.1 5.8l6.6 5.4C41.6 36 45 30.5 45 24c0-1.2-.1-2.4-.4-3.5z"/></svg>
-        Google orqali kirish
+        ${t('google_orqali')}
       </button>
       <div style="text-align:center;color:var(--ink-soft);font-size:11.5px;margin:14px 0;">— yoki email bilan —</div>` : ''}
       ${isLogin ? `
@@ -865,9 +882,9 @@ function renderAuth(){
         <label>Parol</label>
         <input type="password" name="parol" placeholder="Parolingiz" required>
         <div id="auth-err" class="err"></div>
-        <button class="btn-primary" type="submit">Kirish</button>
+        <button class="btn-primary" type="submit">${t('kirish')}</button>
       </form>
-      <button class="btn-ghost" id="toForgot" style="margin-top:10px;">Parolni unutdingizmi?</button>
+      <button class="btn-ghost" id="toForgot" style="margin-top:10px;">${t('parolni_unutdingiz')}</button>
       <button class="btn-ghost" id="toRegister" style="margin-top:2px;display:block;">Hisobingiz yo'qmi? Ro'yxatdan o'ting</button>
       ` : `
       <label style="margin-top:0;">Kim sifatida ro'yxatdan o'tasiz?</label>
@@ -885,7 +902,7 @@ function renderAuth(){
         <input type="password" name="parol" placeholder="Kamida 6 ta belgi" required minlength="6">
         ${institutionFieldsHtml(role, '')}
         <div id="auth-err" class="err"></div>
-        <button class="btn-primary" type="submit">Ro'yxatdan o'tish</button>
+        <button class="btn-primary" type="submit">${t('royxatdan_otish')}</button>
       </form>
       <button class="btn-ghost" id="toLogin" style="margin-top:12px;">Hisobingiz bormi? Kiring</button>
       `}
@@ -936,6 +953,8 @@ function attachAuthHandlers(){
   });
   const ttb = document.getElementById('themeToggleBtn');
   if(ttb) ttb.addEventListener('click', toggleTheme);
+  const ltb = document.getElementById('langToggleBtn');
+  if(ltb) ltb.addEventListener('click', cycleLang);
 }
 
 function renderApp(){
@@ -945,6 +964,7 @@ function renderApp(){
     <div class="brand">Re<em>ja</em></div>
     <div class="topbar-right">
       <button class="theme-toggle" id="themeToggleBtn" title="Kun/tun rejimi">${svgIcon(state.theme==='dark'?'sun':'moon')}</button>
+      <button class="theme-toggle" id="langToggleBtn" title="Til / Язык / Language" style="width:auto;padding:0 10px;font-size:11px;font-weight:700;">${(state.lang||'uz').toUpperCase()}</button>
       <button class="userchip" id="userchipBtn">${escapeHtml(state.user.ism.split(' ')[0])} ⌄</button>
     </div>
   </div>
@@ -975,28 +995,28 @@ function renderTabs(){
     const hasDot = reqCount || unreadTotal;
     return `
     <div class="tabs">
-      <button class="tab ${state.tab==='bosh'?'active':''}" data-tab="bosh">${svgIcon('home')}<span>Bosh sahifa</span></button>
-      <button class="tab ${state.tab==='jadval'?'active':''}" data-tab="jadval">${svgIcon('cal')}<span>Jadval</span></button>
-      <button class="tab ${state.tab==='rejalar'?'active':''}" data-tab="rejalar">${svgIcon('plan')}<span>Rejalar</span></button>
-      <button class="tab ${state.tab==='eslatma'?'active':''}" data-tab="eslatma">${svgIcon('bell')}<span>Eslatmalar</span></button>
-      <button class="tab ${state.tab==='baholar'?'active':''}" data-tab="baholar">${svgIcon('grade')}<span>Baholar</span></button>
-      <button class="tab ${state.tab==='profil'?'active':''}" data-tab="profil">${hasDot?'<span class="dot"></span>':''}${svgIcon('user')}<span>Profil</span></button>
+      <button class="tab ${state.tab==='bosh'?'active':''}" data-tab="bosh">${svgIcon('home')}<span>${t('tab_bosh')}</span></button>
+      <button class="tab ${state.tab==='jadval'?'active':''}" data-tab="jadval">${svgIcon('cal')}<span>${t('tab_jadval')}</span></button>
+      <button class="tab ${state.tab==='rejalar'?'active':''}" data-tab="rejalar">${svgIcon('plan')}<span>${t('tab_rejalar')}</span></button>
+      <button class="tab ${state.tab==='eslatma'?'active':''}" data-tab="eslatma">${svgIcon('bell')}<span>${t('tab_eslatma')}</span></button>
+      <button class="tab ${state.tab==='baholar'?'active':''}" data-tab="baholar">${svgIcon('grade')}<span>${t('tab_baholar')}</span></button>
+      <button class="tab ${state.tab==='profil'?'active':''}" data-tab="profil">${hasDot?'<span class="dot"></span>':''}${svgIcon('user')}<span>${t('tab_profil')}</span></button>
     </div>`;
   }
   if(state.user.role==='ota_ona'){
     const unreadTotal = Object.values(state.parentData.unreadByEmail||{}).reduce((a,b)=>a+b,0);
     return `
     <div class="tabs">
-      <button class="tab ${state.tab==='p_bosh'?'active':''}" data-tab="p_bosh">${svgIcon('home')}<span>Bosh sahifa</span></button>
-      <button class="tab ${state.tab==='p_farzandlar'?'active':''}" data-tab="p_farzandlar">${unreadTotal?'<span class="dot"></span>':''}${svgIcon('users')}<span>Farzandlar</span></button>
-      <button class="tab ${state.tab==='profil'?'active':''}" data-tab="profil">${svgIcon('user')}<span>Profil</span></button>
+      <button class="tab ${state.tab==='p_bosh'?'active':''}" data-tab="p_bosh">${svgIcon('home')}<span>${t('tab_bosh')}</span></button>
+      <button class="tab ${state.tab==='p_farzandlar'?'active':''}" data-tab="p_farzandlar">${unreadTotal?'<span class="dot"></span>':''}${svgIcon('users')}<span>${t('tab_farzandlar')}</span></button>
+      <button class="tab ${state.tab==='profil'?'active':''}" data-tab="profil">${svgIcon('user')}<span>${t('tab_profil')}</span></button>
     </div>`;
   }
   if(state.user.role==='admin'){
     return `
     <div class="tabs">
-      <button class="tab ${state.tab==='a_elonlar'?'active':''}" data-tab="a_elonlar">${svgIcon('speaker')}<span>E'lonlar</span></button>
-      <button class="tab ${state.tab==='profil'?'active':''}" data-tab="profil">${svgIcon('user')}<span>Profil</span></button>
+      <button class="tab ${state.tab==='a_elonlar'?'active':''}" data-tab="a_elonlar">${svgIcon('speaker')}<span>${t('tab_elonlar')}</span></button>
+      <button class="tab ${state.tab==='profil'?'active':''}" data-tab="profil">${svgIcon('user')}<span>${t('tab_profil')}</span></button>
     </div>`;
   }
   return '';
@@ -1068,7 +1088,7 @@ function renderStudentAnnouncements(){
   return `
   <div class="sheet sheet-plum">
     <div class="eyebrow">${escapeHtml(state.user.muassasaNomi)} — e'lonlar</div>
-    ${list.slice(0,4).map(a=>`<div class="plan-item"><div class="item-title">${escapeHtml(a.matn)}</div><div class="item-meta">${fmtDate(a.sana)} · ${escapeHtml(a.adminName)}</div></div>`).join('')}
+    ${list.slice(0,4).map(a=>`<div class="plan-item">${a.rasmUrl?`<img src="${a.rasmUrl}" style="width:100%;border-radius:8px;margin-bottom:8px;">`:''}<div class="item-title">${escapeHtml(a.matn)}</div><div class="item-meta">${fmtDate(a.sana)} · ${escapeHtml(a.adminName)}</div></div>`).join('')}
   </div>`;
 }
 
@@ -1271,7 +1291,7 @@ function renderProfile(){
       <label style="margin-top:16px;">Brauzer bildirishnomasi</label>
       <button class="btn-small" id="notifPermBtn">${(window.Notification && Notification.permission==='granted') ? 'Yoqilgan ✓' : 'Ruxsat berish'}</button>
     </div>
-    <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">Chiqish</button>
+    <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">${t('chiqish')}</button>
     `;
   }
   if(u.role==='ota_ona'){
@@ -1288,7 +1308,7 @@ function renderProfile(){
       <p>Farzandingiz avval o'zi ro'yxatdan o'tgan bo'lishi kerak. Uning emailini kiritib so'rov yuboring, u tasdiqlagach bog'lanasiz.</p>
       <button class="btn-small btn-plum" id="addChildBtn2">Farzand qo'shish</button>
     </div>
-    <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">Chiqish</button>
+    <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">${t('chiqish')}</button>
     `;
   }
   if(u.role==='admin'){
@@ -1303,7 +1323,7 @@ function renderProfile(){
       <button class="btn-small" id="editProfileBtn" style="margin-top:10px;">✎ Profilni tahrirlash</button>
       ${u.authProvider==='google' ? `<button class="btn-small btn-plum" id="setPasswordBtn" style="margin-left:6px;">🔑 Parol o'rnatish</button>` : ''}
     </div>
-    <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">Chiqish</button>
+    <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">${t('chiqish')}</button>
     `;
   }
   return '';
@@ -1421,6 +1441,7 @@ function renderAdminAnnouncements(){
     <div class="eyebrow">${escapeHtml(state.user.muassasaNomi)} — e'lonlar</div>
     ${list.length ? list.map(a=>`
       <div class="plan-item">
+        ${a.rasmUrl?`<img src="${a.rasmUrl}" style="width:100%;border-radius:8px;margin-bottom:8px;">`:''}
         <div class="item-top">
           <div><div class="item-title">${escapeHtml(a.matn)}</div><div class="item-meta">${fmtDate(a.sana)}</div></div>
           <div style="display:flex;gap:4px;">
@@ -1682,6 +1703,10 @@ function renderModal(){
       <form id="announcementForm">
         <label>Matn</label>
         <textarea name="matn" rows="4" placeholder="Barcha o'quvchilarga xabar..." required>${a?escapeHtml(a.matn):''}</textarea>
+        <label>Rasm (ixtiyoriy, maks. 4MB)</label>
+        <input type="file" name="rasm" accept="image/*">
+        ${a && a.rasmUrl ? `<img src="${a.rasmUrl}" style="width:100%;border-radius:8px;margin-top:8px;">` : ''}
+        <div id="upload-progress" class="item-meta" style="margin-top:6px;"></div>
         <div id="modal-err" class="err"></div>
         <button class="btn-primary" type="submit">${editing?'Yangilash':'Joylash'}</button>
       </form>
@@ -1727,6 +1752,8 @@ function attachAppHandlers(){
   if(uc) uc.addEventListener('click', ()=> switchTab('profil'));
   const ttb = document.getElementById('themeToggleBtn');
   if(ttb) ttb.addEventListener('click', toggleTheme);
+  const ltb = document.getElementById('langToggleBtn');
+  if(ltb) ltb.addEventListener('click', cycleLang);
   const gp = document.getElementById('goProfileBtn');
   if(gp) gp.addEventListener('click', ()=> switchTab('profil'));
   const gc = document.getElementById('goChildrenBtn');
