@@ -226,7 +226,31 @@ const I18N = {
     tab_umumiy: "Umumiy", tab_users: "Foydalanuvchilar", tab_muassasa: "Muassasalar",
     kirish: "Kirish", royxatdan_otish: "Ro'yxatdan o'tish", chiqish: "Chiqish",
     saqlash: "Saqlash", bekor_qilish: "Bekor qilish", yangilash: "Yangilash", tahrirlash: "Tahrirlash",
-    parolni_unutdingiz: "Parolni unutdingizmi?", google_orqali: "Google orqali kirish"
+    parolni_unutdingiz: "Parolni unutdingizmi?", google_orqali: "Google orqali kirish",
+    err_ism_email_parol: "Ism, email va kamida 6 belgili parolni to'ldiring.",
+    err_ismni_kiriting: "Ismni kiriting.",
+    err_viloyat_tuman: "Viloyat va tuman/shaharni tanlang.",
+    err_barcha_maydon: "Barcha maydonlarni to'ldiring.",
+    err_muassasa_sinf: "Muassasa raqami va sinf/kursni kiriting.",
+    err_muassasa_nomi: "Muassasa raqami/nomini kiriting.",
+    err_sinf_kursni: "Sinf/kursni kiriting.",
+    err_profil_topilmadi: "Profil ma'lumotlari topilmadi. Iltimos, qo'llab-quvvatlash bilan bog'laning.",
+    err_talaba_topilmadi: "Bu email bilan o'quvchi/talaba hisobi topilmadi.",
+    err_farzand_email: "Farzandingizning emailini kiriting.",
+    err_email_kiriting: "Emailingizni kiriting.",
+    err_matn_sana_vaqt: "Matn, sana va vaqtni kiriting.",
+    err_elon_matni: "E'lon matnini kiriting.",
+    err_nom_sana: "Nom va sanani kiriting.",
+    err_farzand_bog: "Bu farzand allaqachon bog'langan.",
+    err_parol_mos_emas: "Parollar bir xil emas.",
+    err_parol_kamida6: "Parol kamida 6 ta belgidan iborat bo'lsin.",
+    err_sorov_yuborilgan: "So'rov allaqachon yuborilgan, javobni kuting.",
+    err_fan_baho_sana: "Fan, baho va sanani kiriting.",
+    err_fan_vaqt_kun: "Fan, vaqt va kamida bitta kunni tanlang.",
+    err_fan_vazifa_muddat: "Fan, vazifa va muddatni kiriting.",
+    ota_ona_hisobi: "Ota-ona hisobi",
+    farzand_qoshish: "Farzand qo'shish",
+    farzand_qoshish_izoh: "Farzandingiz avval o'zi ro'yxatdan o'tgan bo'lishi kerak. Uning emailini kiritib so'rov yuboring, u tasdiqlagach bog'lanasiz."
   },
   ru: {
     tagline: "Расписание уроков, планы, напоминания — и связь с семьёй, в одном месте.",
@@ -235,7 +259,31 @@ const I18N = {
     tab_umumiy: "Обзор", tab_users: "Пользователи", tab_muassasa: "Учреждения",
     kirish: "Войти", royxatdan_otish: "Регистрация", chiqish: "Выйти",
     saqlash: "Сохранить", bekor_qilish: "Отмена", yangilash: "Обновить", tahrirlash: "Изменить",
-    parolni_unutdingiz: "Забыли пароль?", google_orqali: "Войти через Google"
+    parolni_unutdingiz: "Забыли пароль?", google_orqali: "Войти через Google",
+    err_ism_email_parol: "Заполните имя, email и пароль (минимум 6 символов).",
+    err_ismni_kiriting: "Введите имя.",
+    err_viloyat_tuman: "Выберите область и район/город.",
+    err_barcha_maydon: "Заполните все поля.",
+    err_muassasa_sinf: "Укажите номер учреждения и класс/курс.",
+    err_muassasa_nomi: "Укажите номер/название учреждения.",
+    err_sinf_kursni: "Укажите класс/курс.",
+    err_profil_topilmadi: "Данные профиля не найдены. Обратитесь в поддержку.",
+    err_talaba_topilmadi: "Учётная запись ученика с таким email не найдена.",
+    err_farzand_email: "Введите email вашего ребёнка.",
+    err_email_kiriting: "Введите ваш email.",
+    err_matn_sana_vaqt: "Заполните текст, дату и время.",
+    err_elon_matni: "Введите текст объявления.",
+    err_nom_sana: "Заполните название и дату.",
+    err_farzand_bog: "Этот ребёнок уже привязан.",
+    err_parol_mos_emas: "Пароли не совпадают.",
+    err_parol_kamida6: "Пароль должен содержать минимум 6 символов.",
+    err_sorov_yuborilgan: "Запрос уже отправлен, ожидайте ответа.",
+    err_fan_baho_sana: "Заполните предмет, оценку и дату.",
+    err_fan_vaqt_kun: "Заполните предмет, время и хотя бы один день.",
+    err_fan_vazifa_muddat: "Заполните предмет, задание и срок.",
+    ota_ona_hisobi: "Аккаунт родителя",
+    farzand_qoshish: "Добавить ребёнка",
+    farzand_qoshish_izoh: "Ваш ребёнок должен сначала сам зарегистрироваться. Введите его email, чтобы отправить запрос — после подтверждения вы будете связаны."
   },
   en: {
     tagline: "Class schedule, plans, reminders — and staying connected with family, all in one place.",
@@ -244,7 +292,31 @@ const I18N = {
     tab_umumiy: "Overview", tab_users: "Users", tab_muassasa: "Institutions",
     kirish: "Log in", royxatdan_otish: "Sign up", chiqish: "Log out",
     saqlash: "Save", bekor_qilish: "Cancel", yangilash: "Refresh", tahrirlash: "Edit",
-    parolni_unutdingiz: "Forgot password?", google_orqali: "Sign in with Google"
+    parolni_unutdingiz: "Forgot password?", google_orqali: "Sign in with Google",
+    err_ism_email_parol: "Fill in name, email, and a password of at least 6 characters.",
+    err_ismni_kiriting: "Enter your name.",
+    err_viloyat_tuman: "Select region and district/city.",
+    err_barcha_maydon: "Fill in all fields.",
+    err_muassasa_sinf: "Enter institution number and class/course.",
+    err_muassasa_nomi: "Enter institution number/name.",
+    err_sinf_kursni: "Enter class/course.",
+    err_profil_topilmadi: "Profile data not found. Please contact support.",
+    err_talaba_topilmadi: "No student account found with this email.",
+    err_farzand_email: "Enter your child's email.",
+    err_email_kiriting: "Enter your email.",
+    err_matn_sana_vaqt: "Fill in text, date, and time.",
+    err_elon_matni: "Enter the announcement text.",
+    err_nom_sana: "Fill in name and date.",
+    err_farzand_bog: "This child is already linked.",
+    err_parol_mos_emas: "Passwords don't match.",
+    err_parol_kamida6: "Password must be at least 6 characters.",
+    err_sorov_yuborilgan: "Request already sent, awaiting response.",
+    err_fan_baho_sana: "Fill in subject, grade, and date.",
+    err_fan_vaqt_kun: "Fill in subject, time, and at least one day.",
+    err_fan_vazifa_muddat: "Fill in subject, task, and due date.",
+    ota_ona_hisobi: "Parent account",
+    farzand_qoshish: "Add child",
+    farzand_qoshish_izoh: "Your child must register first. Enter their email to send a request — once they confirm, you'll be linked."
   }
 };
 function t(key){
@@ -259,4 +331,14 @@ function cycleLang(){
     sSet('account:'+sanitizeKey(state.user.email), Object.assign({}, state.user, { lang: state.lang })).catch(()=>{});
   }
   render();
+}
+
+function t_muassasaNote(nomi){
+  const map = {
+    uz: `O'quvchilar ro'yxatdan o'tishda "${nomi}" nomini kiritishsa, sizning e'lonlaringizni ko'radi.`,
+    ru: `Если ученики при регистрации укажут "${nomi}", они увидят ваши объявления.`,
+    en: `If students enter "${nomi}" when registering, they'll see your announcements.`
+  };
+  const lang = (typeof state !== 'undefined' && state.lang) ? state.lang : 'uz';
+  return map[lang] || map.uz;
 }
