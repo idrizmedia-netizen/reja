@@ -173,7 +173,7 @@ function renderDashboard(){
     <div class="brand">Reja <span style="font-size:12px;font-weight:600;color:var(--ink-soft);vertical-align:middle;">· admin</span></div>
     <div class="topbar-right">
       <button class="theme-toggle" id="themeToggleBtn" title="Kun/tun rejimi">${svgIcon(state.theme==='dark'?'sun':'moon')}</button>
-      <button class="userchip" id="logoutBtn">${escapeHtml(state.user.ism.split(' ')[0])} · Chiqish</button>
+      <button class="userchip" id="logoutBtn">${escapeHtml((state.user.ism||state.user.email||'').split(' ')[0])} · Chiqish</button>
     </div>
   </div>
   ${state.tab==='sa_umumiy' ? renderSAOverview() : ''}
