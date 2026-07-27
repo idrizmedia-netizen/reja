@@ -744,11 +744,10 @@ async function postAnnouncement(e){
   const file = f.rasm.files[0];
   if(file){
     try{
-      if(progressBox) progressBox.textContent = "Rasm yuklanmoqda...";
-      const path = 'announcements/'+institutionKey(state.user)+'/'+uid()+'-'+file.name;
-      rasmUrl = await uploadImage(path, file);
+      if(progressBox) progressBox.textContent = "Rasm siqilmoqda...";
+      rasmUrl = await uploadImage(file);
     }catch(err){
-      errBox.textContent = err.message || "Rasmni yuklashda xatolik.";
+      errBox.textContent = err.message || "Rasmni qayta ishlashda xatolik.";
       if(progressBox) progressBox.textContent = '';
       return;
     }
