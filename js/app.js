@@ -58,11 +58,10 @@ async function loginAs(acc){
   state.lang = acc.lang || 'uz';
   sessionMem = acc.email;
   if(acc.role === 'talaba'){
-    const [sc, pl, rm, reqs, gr, hw] = await Promise.all([
+    const [sc, pl, rm, gr, hw] = await Promise.all([
       sGet('schedule:'+sanitizeKey(acc.email)),
       sGet('plans:'+sanitizeKey(acc.email)),
       sGet('reminders:'+sanitizeKey(acc.email)),
-      sGet('link_requests:'+sanitizeKey(acc.email)),
       sGet('grades:'+sanitizeKey(acc.email)),
       sGet('homework:'+sanitizeKey(acc.email))
     ]);
@@ -71,15 +70,16 @@ async function loginAs(acc){
     state.data.reminders = rm || [];
     state.data.grades = gr || [];
     state.data.homework = hw || [];
-    state.parentData.requests = (reqs||[]).filter(r=>r.status==='pending');
-    state.parentData.linkedParents = await sGet('links_child:'+sanitizeKey(acc.email)) || [];
+    const allReqs = await lrListForStudent(sanitizeKey(acc.email));
+    state.parentData.requests = allReqs.filter(r=>r.status==='pending');
+    state.parentData.linkedParents = allReqs.filter(r=>r.status==='accepted').map(r=>r.parentEmail);
     await computeUnread(state.parentData.linkedParents, 'child');
   } else if(acc.role === 'ota_ona'){
     await loadParentChildren();
     await computeUnread(state.parentData.children.map(c=>c.email), 'parent');
   } else if(acc.role === 'admin'){
-    const key = 'announcements:'+(acc.muassasaNomi ? institutionKey(acc) : sanitizeKey(acc.email));
-    state.adminData.announcements = await sGet(key) || [];
+    const key = acc.muassasaNomi ? institutionKey(acc) : sanitizeKey(acc.email);
+    state.adminData.announcements = await annList(key);
   }
   state.view = 'app';
   state.tab = defaultTab();
@@ -114,10 +114,10 @@ async function markThreadRead(partnerEmail){
 }
 
 async function loadParentChildren(){
-  const parentKey = sanitizeKey(state.user.email);
-  const childEmails = await sGet('links_parent:'+parentKey) || [];
+  const linked = await lrListForParent(state.user.email);
   const children = [];
-  for(const em of childEmails){
+  for(const r of linked){
+    const em = r.studentEmail;
     const acc = await sGet('account:'+sanitizeKey(em));
     if(!acc) continue;
     const [sc, pl, rm, gr, hw] = await Promise.all([
@@ -241,6 +241,7 @@ async function handleRegister(e){
   }
   try{
     await fbRegister(email, parol);
+    await fbSendVerification();
   }catch(err){
     errBox.textContent = fbErrorToUzbek(err);
     return;
@@ -588,38 +589,32 @@ async function sendLinkRequest(e){
   if(!childEmail){ errBox.textContent = t('err_farzand_email'); return; }
   const childAcc = await sGet('account:'+sanitizeKey(childEmail));
   if(!childAcc || childAcc.role !== 'talaba'){ errBox.textContent = t('err_talaba_topilmadi'); return; }
-  const reqKey = 'link_requests:'+sanitizeKey(childEmail);
-  const reqs = await sGet(reqKey) || [];
-  if(reqs.some(r=> r.parentEmail===state.user.email && r.status==='pending')){ errBox.textContent = t('err_sorov_yuborilgan'); return; }
+  const studentKey = sanitizeKey(childEmail);
   const parentKey = sanitizeKey(state.user.email);
-  const already = await sGet('links_parent:'+parentKey) || [];
-  if(already.includes(childEmail)){ errBox.textContent = t('err_farzand_bog'); return; }
-  reqs.push({ id: uid(), parentEmail: state.user.email, parentName: state.user.ism, status:'pending', createdAt: Date.now() });
-  await sSet(reqKey, reqs);
+  const existing = await lrGet(studentKey, parentKey);
+  if(existing && existing.status === 'accepted'){ errBox.textContent = t('err_farzand_bog'); return; }
+  if(existing && existing.status === 'pending'){ errBox.textContent = t('err_sorov_yuborilgan'); return; }
+  try{
+    await lrSendOrRetry(studentKey, parentKey, state.user.email, state.user.ism);
+  }catch(err){
+    errBox.textContent = "So'rov yuborishda xatolik yuz berdi.";
+    return;
+  }
   closeModal();
   showToast("So'rov yuborildi. Farzandingiz tasdiqlashini kuting.");
 }
 
-async function respondLinkRequest(reqId, accept){
+async function respondLinkRequest(parentKey, accept){
   const selfKey = sanitizeKey(state.user.email);
-  const reqKey = 'link_requests:'+selfKey;
-  const reqs = await sGet(reqKey) || [];
-  const req = reqs.find(r=>r.id===reqId);
-  if(!req) return;
-  req.status = accept ? 'accepted' : 'declined';
-  await sSet(reqKey, reqs);
-  if(accept){
-    const linkedChild = await sGet('links_child:'+selfKey) || [];
-    if(!linkedChild.includes(req.parentEmail)) linkedChild.push(req.parentEmail);
-    await sSet('links_child:'+selfKey, linkedChild);
-    state.parentData.linkedParents = linkedChild;
-
-    const parentKey = sanitizeKey(req.parentEmail);
-    const linkedByParent = await sGet('links_parent:'+parentKey) || [];
-    if(!linkedByParent.includes(state.user.email)) linkedByParent.push(state.user.email);
-    await sSet('links_parent:'+parentKey, linkedByParent);
+  try{
+    await lrRespond(selfKey, parentKey, accept);
+  }catch(err){
+    showToast("Xatolik yuz berdi, qayta urinib ko'ring.");
+    return;
   }
-  state.parentData.requests = reqs.filter(r=>r.status==='pending');
+  const allReqs = await lrListForStudent(selfKey);
+  state.parentData.requests = allReqs.filter(r=>r.status==='pending');
+  state.parentData.linkedParents = allReqs.filter(r=>r.status==='accepted').map(r=>r.parentEmail);
   render();
   showToast(accept ? "Bog'landingiz." : "So'rov rad etildi.");
 }
@@ -737,9 +732,8 @@ async function postAnnouncement(e){
   const errBox = document.getElementById('modal-err');
   const progressBox = document.getElementById('upload-progress');
   if(!matn){ errBox.textContent = t('err_elon_matni'); return; }
-  const key = 'announcements:'+institutionKey(state.user);
+  const instKey = institutionKey(state.user);
   const editId = state.modal.editId;
-  let list = await sGet(key) || [];
   let rasmUrl = null;
   const file = f.rasm.files[0];
   if(file){
@@ -752,22 +746,39 @@ async function postAnnouncement(e){
       return;
     }
   }
-  if(editId){
-    const a = list.find(x=>x.id===editId);
-    if(a){ a.matn = matn; if(rasmUrl) a.rasmUrl = rasmUrl; }
-  } else {
-    list.unshift({ id: uid(), matn, sana: todayISO(), adminName: state.user.ism, rasmUrl: rasmUrl || null });
+  try{
+    if(editId){
+      const patch = { matn };
+      if(rasmUrl) patch.rasmUrl = rasmUrl;
+      await annUpdate(instKey, editId, patch);
+    } else {
+      await annCreate(instKey, {
+        matn,
+        sana: todayISO(),
+        adminName: state.user.ism,
+        adminEmail: state.user.email.toLowerCase(),
+        rasmUrl: rasmUrl || null
+      });
+    }
+  }catch(err){
+    errBox.textContent = "E'lonni saqlashda xatolik yuz berdi.";
+    if(progressBox) progressBox.textContent = '';
+    return;
   }
-  await sSet(key, list);
-  state.adminData.announcements = list;
+  state.adminData.announcements = await annList(instKey);
   closeModal();
   showToast(editId ? "E'lon yangilandi." : "E'lon joylandi.");
 }
 
 async function delAnnouncement(id){
-  const key = 'announcements:'+institutionKey(state.user);
+  const instKey = institutionKey(state.user);
+  try{
+    await annDelete(instKey, id);
+  }catch(err){
+    showToast("O'chirishda xatolik yuz berdi.");
+    return;
+  }
   state.adminData.announcements = state.adminData.announcements.filter(a=>a.id!==id);
-  await sSet(key, state.adminData.announcements);
   render();
 }
 
@@ -972,6 +983,12 @@ function renderApp(){
       <button class="userchip" id="userchipBtn">${escapeHtml((state.user.ism||state.user.email||'').split(' ')[0])} ⌄</button>
     </div>
   </div>
+  ${(!state.verifyBannerDismissed && _auth.currentUser && _auth.currentUser.emailVerified===false && state.user.authProvider==='password') ? `
+  <div class="sheet" style="background:#fff8e1;border-left:4px solid #f5a623;margin:0 0 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:200px;">✉️ Email manzilingiz hali tasdiqlanmagan. Pochtangizga yuborilgan havolani bosing.</div>
+    <button class="btn-small" id="resendVerifyBtn">Qayta yuborish</button>
+    <button class="btn-small" id="dismissVerifyBtn" style="background:transparent;">Yopish</button>
+  </div>` : ''}
   ${renderTabContent()}
   ${state.modal ? renderModal() : ''}
   ${renderFab()}
@@ -1753,6 +1770,19 @@ function renderModal(){
 }
 
 function attachAppHandlers(){
+  const rvb = document.getElementById('resendVerifyBtn');
+  if(rvb) rvb.addEventListener('click', async ()=>{
+    rvb.disabled = true;
+    try{
+      await fbSendVerification();
+      showToast("Tasdiqlash xati qayta yuborildi.");
+    }catch(err){
+      showToast("Xatolik: birozdan keyin qayta urinib ko'ring.");
+    }
+    rvb.disabled = false;
+  });
+  const dvb = document.getElementById('dismissVerifyBtn');
+  if(dvb) dvb.addEventListener('click', ()=>{ state.verifyBannerDismissed = true; render(); });
   document.querySelectorAll('.tab').forEach(t=> t.addEventListener('click', ()=> switchTab(t.dataset.tab)));
   const fab = document.getElementById('fabBtn');
   if(fab) fab.addEventListener('click', ()=>{
@@ -1889,8 +1919,8 @@ function attachAppHandlers(){
 
 async function loadStudentAnnouncements(){
   if(state.user && state.user.role==='talaba' && state.user.muassasaNomi){
-    const key = 'announcements:'+institutionKey(state.user);
-    state.data._announcements = await sGet(key) || [];
+    const key = institutionKey(state.user);
+    state.data._announcements = await annList(key);
     render();
   }
 }
