@@ -50,6 +50,7 @@ async function boot(){
 }
 
 async function loginAs(acc){
+  if(!acc.ism) acc.ism = acc.email;
   state.user = acc;
   state.theme = acc.theme || 'light';
   state.lang = acc.lang || 'uz';
@@ -967,7 +968,7 @@ function renderApp(){
     <div class="topbar-right">
       <button class="theme-toggle" id="themeToggleBtn" title="Kun/tun rejimi">${svgIcon(state.theme==='dark'?'sun':'moon')}</button>
       <button class="theme-toggle" id="langToggleBtn" title="Til / Язык / Language" style="width:auto;padding:0 10px;font-size:11px;font-weight:700;">${(state.lang||'uz').toUpperCase()}</button>
-      <button class="userchip" id="userchipBtn">${escapeHtml(state.user.ism.split(' ')[0])} ⌄</button>
+      <button class="userchip" id="userchipBtn">${escapeHtml((state.user.ism||state.user.email||'').split(' ')[0])} ⌄</button>
     </div>
   </div>
   ${renderTabContent()}
@@ -1421,7 +1422,7 @@ function renderParentChildren(){
               <div style="display:flex;gap:4px;">
                 <button class="del" data-parent-edit-plan="${escapeHtml(c.email)}|${p.id}" title="Tahrirlash">✎</button>
                 <button class="del" data-parent-del-plan="${escapeHtml(c.email)}|${p.id}">✕</button>
-              </div>` : `<span class="badge">${escapeHtml(c.acc.ism.split(' ')[0])}dan</span>`}
+              </div>` : `<span class="badge">${escapeHtml((c.acc.ism||c.acc.email||'').split(' ')[0])}dan</span>`}
             </div>
           </div>`).join('')}
         ${upcomingRems.map(r=>`
@@ -1432,7 +1433,7 @@ function renderParentChildren(){
               <div style="display:flex;gap:4px;">
                 <button class="del" data-parent-edit-reminder="${escapeHtml(c.email)}|${r.id}" title="Tahrirlash">✎</button>
                 <button class="del" data-parent-del-reminder="${escapeHtml(c.email)}|${r.id}">✕</button>
-              </div>` : `<span class="badge">${escapeHtml(c.acc.ism.split(' ')[0])}dan</span>`}
+              </div>` : `<span class="badge">${escapeHtml((c.acc.ism||c.acc.email||'').split(' ')[0])}dan</span>`}
             </div>
           </div>`).join('')}
       ` : `<div class="empty" style="padding:10px;">Hozircha yaqin reja yoki eslatma yo'q.</div>`}
