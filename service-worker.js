@@ -1,4 +1,4 @@
-const CACHE_NAME = 'reja-cache-v2';
+const CACHE_NAME = 'reja-cache-v3';
 const APP_SHELL = [
   './',
   './index.html',
@@ -6,8 +6,8 @@ const APP_SHELL = [
   './css/style.css',
   './js/common.js',
   './js/app.js',
-  './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icon/icon-192.png',
+  './icon/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
