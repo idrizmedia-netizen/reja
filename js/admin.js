@@ -69,7 +69,11 @@ async function loadSuperAdminData(){
   const pendingAdmins = adminlar.filter(u=>!u.approved);
   const muassasalar = [];
   const seenKeys = new Set();
-  talabalar.forEach(u=>{
+  // ESLATMA: avval bu yerda faqat "talabalar" ro'yxati aylantirilardi, shuning
+  // uchun agar muassasada hali birorta ham talaba ro'yxatdan o'tmagan bo'lsa
+  // (lekin muassasa admini allaqachon bor bo'lsa), o'sha muassasa "Muassasalar"
+  // bo'limida umuman ko'rinmasdi. Endi adminlar ham hisobga olinadi.
+  [...talabalar, ...adminlar].forEach(u=>{
     if(!u.muassasaNomi) return;
     const k = institutionKey(u);
     if(seenKeys.has(k)) return;
