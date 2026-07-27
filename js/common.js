@@ -250,7 +250,19 @@ const I18N = {
     err_fan_vazifa_muddat: "Fan, vazifa va muddatni kiriting.",
     ota_ona_hisobi: "Ota-ona hisobi",
     farzand_qoshish: "Farzand qo'shish",
-    farzand_qoshish_izoh: "Farzandingiz avval o'zi ro'yxatdan o'tgan bo'lishi kerak. Uning emailini kiritib so'rov yuboring, u tasdiqlagach bog'lanasiz."
+    farzand_qoshish_izoh: "Farzandingiz avval o'zi ro'yxatdan o'tgan bo'lishi kerak. Uning emailini kiritib so'rov yuboring, u tasdiqlagach bog'lanasiz.",
+    lbl_email: "Email", lbl_parol: "Parol", lbl_ism_familiya: "Ism va familiya",
+    lbl_viloyat: "Viloyat", lbl_tuman: "Tuman / shahar", lbl_sinf: "Sinf / kurs",
+    lbl_fan: "Fan nomi", lbl_boshlanish: "Boshlanish", lbl_tugash: "Tugash",
+    lbl_xona: "Xona / auditoriya (ixtiyoriy)", lbl_hafta_kunlari: "Hafta kunlari",
+    lbl_turi: "Turi", lbl_reja_nomi: "Reja nomi", lbl_sana: "Sana", lbl_izoh: "Izoh (ixtiyoriy)",
+    lbl_nima_haqida: "Nima haqida eslatilsin", lbl_vaqt: "Vaqt", lbl_takrorlanish: "Takrorlanish",
+    lbl_baho: "Baho", lbl_vazifa: "Vazifa", lbl_muddat: "Topshirish muddati",
+    lbl_muassasa_raqami: "Muassasa raqami / nomi", lbl_matn: "Matn", lbl_rasm: "Rasm (ixtiyoriy, maks. 4MB)",
+    lbl_farzand_email: "Farzandingizning emaili", lbl_yangi_parol: "Yangi parol", lbl_parol_takror: "Parolni takrorlang",
+    lbl_kim_royxat: "Kim sifatida ro'yxatdan o'tasiz?", lbl_siz_kimsiz: "Siz kimsiz?",
+    lbl_brauzer_bildirish: "Brauzer bildirishnomasi",
+    lbl_muassasa_turi_talaba: "Ta'lim muassasasi turi", lbl_muassasa_turi: "Muassasa turi"
   },
   ru: {
     tagline: "Расписание уроков, планы, напоминания — и связь с семьёй, в одном месте.",
@@ -283,7 +295,19 @@ const I18N = {
     err_fan_vazifa_muddat: "Заполните предмет, задание и срок.",
     ota_ona_hisobi: "Аккаунт родителя",
     farzand_qoshish: "Добавить ребёнка",
-    farzand_qoshish_izoh: "Ваш ребёнок должен сначала сам зарегистрироваться. Введите его email, чтобы отправить запрос — после подтверждения вы будете связаны."
+    farzand_qoshish_izoh: "Ваш ребёнок должен сначала сам зарегистрироваться. Введите его email, чтобы отправить запрос — после подтверждения вы будете связаны.",
+    lbl_email: "Email", lbl_parol: "Пароль", lbl_ism_familiya: "Имя и фамилия",
+    lbl_viloyat: "Область", lbl_tuman: "Район / город", lbl_sinf: "Класс / курс",
+    lbl_fan: "Название предмета", lbl_boshlanish: "Начало", lbl_tugash: "Конец",
+    lbl_xona: "Кабинет / аудитория (необязательно)", lbl_hafta_kunlari: "Дни недели",
+    lbl_turi: "Тип", lbl_reja_nomi: "Название плана", lbl_sana: "Дата", lbl_izoh: "Комментарий (необязательно)",
+    lbl_nima_haqida: "О чём напомнить", lbl_vaqt: "Время", lbl_takrorlanish: "Повторение",
+    lbl_baho: "Оценка", lbl_vazifa: "Задание", lbl_muddat: "Срок сдачи",
+    lbl_muassasa_raqami: "Номер / название учреждения", lbl_matn: "Текст", lbl_rasm: "Изображение (необязательно, макс. 4МБ)",
+    lbl_farzand_email: "Email вашего ребёнка", lbl_yangi_parol: "Новый пароль", lbl_parol_takror: "Повторите пароль",
+    lbl_kim_royxat: "Кем вы регистрируетесь?", lbl_siz_kimsiz: "Кто вы?",
+    lbl_brauzer_bildirish: "Уведомления браузера",
+    lbl_muassasa_turi_talaba: "Тип учебного заведения", lbl_muassasa_turi: "Тип учреждения"
   },
   en: {
     tagline: "Class schedule, plans, reminders — and staying connected with family, all in one place.",
@@ -316,7 +340,19 @@ const I18N = {
     err_fan_vazifa_muddat: "Fill in subject, task, and due date.",
     ota_ona_hisobi: "Parent account",
     farzand_qoshish: "Add child",
-    farzand_qoshish_izoh: "Your child must register first. Enter their email to send a request — once they confirm, you'll be linked."
+    farzand_qoshish_izoh: "Your child must register first. Enter their email to send a request — once they confirm, you'll be linked.",
+    lbl_email: "Email", lbl_parol: "Password", lbl_ism_familiya: "Full name",
+    lbl_viloyat: "Region", lbl_tuman: "District / city", lbl_sinf: "Class / course",
+    lbl_fan: "Subject name", lbl_boshlanish: "Start", lbl_tugash: "End",
+    lbl_xona: "Room (optional)", lbl_hafta_kunlari: "Days of the week",
+    lbl_turi: "Type", lbl_reja_nomi: "Plan name", lbl_sana: "Date", lbl_izoh: "Note (optional)",
+    lbl_nima_haqida: "What's this reminder about", lbl_vaqt: "Time", lbl_takrorlanish: "Repeat",
+    lbl_baho: "Grade", lbl_vazifa: "Task", lbl_muddat: "Due date",
+    lbl_muassasa_raqami: "Institution number / name", lbl_matn: "Text", lbl_rasm: "Image (optional, max 4MB)",
+    lbl_farzand_email: "Your child's email", lbl_yangi_parol: "New password", lbl_parol_takror: "Repeat password",
+    lbl_kim_royxat: "Who are you registering as?", lbl_siz_kimsiz: "Who are you?",
+    lbl_brauzer_bildirish: "Browser notifications",
+    lbl_muassasa_turi_talaba: "Type of educational institution", lbl_muassasa_turi: "Institution type"
   }
 };
 function t(key){
