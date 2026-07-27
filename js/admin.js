@@ -9,9 +9,10 @@ const SUPERADMIN_CODE = 'REJA-EGASI-2026';
 let state = {
   view: 'gate',       // 'gate' | 'app'
   theme: 'light',
+  lang: 'uz',
   user: null,          // { ism, email }
   tab: 'sa_umumiy',
-  adminData: { allUsers: [], talabalar: [], otaOnalar: [], adminlar: [], muassasalar: [] },
+  adminData: { allUsers: [], talabalar: [], otaOnalar: [], adminlar: [], muassasalar: [], pendingAdmins: [] },
   toast: null
 };
 
@@ -21,18 +22,24 @@ function showToast(msg){
   setTimeout(()=>{ state.toast=null; render(); }, 3600);
 }
 
-async function handleGoogleCredential(payload){
-  const email = (payload.email||'').trim().toLowerCase();
+async function handleGoogleSignInClick(){
   const errBox = document.getElementById('gate-err');
-  if(email !== OWNER_EMAIL){
-    if(errBox) errBox.textContent = "Bu Google hisobi tizim egasi sifatida tanilmagan.";
-    return;
+  try{
+    const result = await fbGoogleSignIn();
+    const email = (result.user.email||'').trim().toLowerCase();
+    if(email !== OWNER_EMAIL){
+      if(errBox) errBox.textContent = "Bu Google hisobi tizim egasi sifatida tanilmagan.";
+      await _auth.signOut();
+      return;
+    }
+    state.user = { ism: result.user.displayName || 'Tizim egasi', email };
+    state.view = 'app';
+    state.tab = 'sa_umumiy';
+    await loadSuperAdminData();
+    render();
+  }catch(err){
+    if(errBox) errBox.textContent = fbErrorToUzbek(err);
   }
-  state.user = { ism: payload.name || 'Tizim egasi', email };
-  state.view = 'app';
-  state.tab = 'sa_umumiy';
-  await loadSuperAdminData();
-  render();
 }
 
 async function handlePasscodeSubmit(e){
@@ -48,6 +55,7 @@ async function handlePasscodeSubmit(e){
 }
 
 function logout(){
+  _auth.signOut().catch(()=>{});
   state.user = null;
   state.view = 'gate';
   render();
@@ -64,6 +72,7 @@ async function loadSuperAdminData(){
   const talabalar = users.filter(u=>u.role==='talaba');
   const otaOnalar = users.filter(u=>u.role==='ota_ona');
   const adminlar = users.filter(u=>u.role==='admin');
+  const pendingAdmins = adminlar.filter(u=>!u.approved);
   const muassasalar = [];
   const seenKeys = new Set();
   talabalar.forEach(u=>{
@@ -73,7 +82,7 @@ async function loadSuperAdminData(){
     seenKeys.add(k);
     muassasalar.push({ key: k, viloyat: u.viloyat||'', tuman: u.tuman||'', muassasaNomi: u.muassasaNomi });
   });
-  state.adminData = { allUsers: users, talabalar, otaOnalar, adminlar, muassasalar };
+  state.adminData = { allUsers: users, talabalar, otaOnalar, adminlar, muassasalar, pendingAdmins };
 }
 
 async function superDeleteUser(email){
@@ -96,6 +105,22 @@ async function superDeleteUser(email){
   showToast("Hisob o'chirildi.");
 }
 
+async function approveInstitution(email){
+  const key = 'account:'+sanitizeKey(email);
+  const acc = await sGet(key);
+  if(!acc) return;
+  acc.approved = true;
+  await sSet(key, acc);
+  await loadSuperAdminData();
+  render();
+  showToast(escapeHtml(acc.muassasaNomi||acc.ism)+" tasdiqlandi.");
+}
+
+async function rejectInstitution(email){
+  if(!confirm("Bu muassasa so'rovini rad etib, hisobni butunlay o'chirmoqchimisiz?")) return;
+  await superDeleteUser(email);
+}
+
 function switchTab(t){ state.tab = t; render(); }
 
 function render(){
@@ -116,15 +141,18 @@ function renderGate(){
     <p style="margin:10px 0 24px;">Bu sahifa faqat tizim egasi uchun. Kirish uchun Google hisobingizni tasdiqlang yoki maxfiy kodni kiriting.</p>
     <div class="sheet sheet-plum">
       <div class="eyebrow">Google orqali kirish</div>
-      <div id="googleSigninContainer" style="display:flex;justify-content:center;margin:6px 0 4px;"></div>
-      <div style="text-align:center;color:var(--ink-soft);font-size:11.5px;margin:10px 0;">— yoki —</div>
+      <button type="button" id="googleSigninBtn" class="btn-primary" style="background:#fff;color:#3c4043;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:10px;margin-top:6px;">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.2-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 16 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3 16 3 9.1 7.6 6.3 14.7z"/><path fill="#4CAF50" d="M24 45c5.5 0 10.4-1.9 14.2-5.1l-6.6-5.4C29.6 36.3 27 37 24 37c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9 40.4 15.9 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.3-4.1 5.8l6.6 5.4C41.6 36 45 30.5 45 24c0-1.2-.1-2.4-.4-3.5z"/></svg>
+        Google orqali kirish
+      </button>
+      <div style="text-align:center;color:var(--ink-soft);font-size:11.5px;margin:14px 0;">— yoki —</div>
       <form id="passcodeForm">
         <label>Maxfiy kod</label>
         <input type="text" name="code" placeholder="Kodni kiriting" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="font-family:'JetBrains Mono',monospace;letter-spacing:0.5px;">
         <div id="gate-err" class="err"></div>
         <button class="btn-primary btn-plum" type="submit">Kirish</button>
       </form>
-      <div class="note">Google orqali kirish faqat oldindan sozlangan bitta Google hisobi (tizim egasi) uchun ishlaydi. Kod HTML manbasida ko'rinadi — bu qulaylik uchun, real xavfsizlik emas.</div>
+      <div class="note">Google orqali kirish faqat oldindan sozlangan bitta Google hisobi (tizim egasi) uchun ishlaydi.</div>
     </div>
   </div>`;
 }
@@ -134,9 +162,8 @@ function attachGateHandlers(){
   if(pf) pf.addEventListener('submit', handlePasscodeSubmit);
   const ttb = document.getElementById('themeToggleBtn');
   if(ttb) ttb.addEventListener('click', toggleTheme);
-  if(document.getElementById('googleSigninContainer')){
-    renderGoogleButton('googleSigninContainer', handleGoogleCredential);
-  }
+  const gsb = document.getElementById('googleSigninBtn');
+  if(gsb) gsb.addEventListener('click', handleGoogleSignInClick);
 }
 
 function renderDashboard(){
@@ -150,14 +177,35 @@ function renderDashboard(){
     </div>
   </div>
   ${state.tab==='sa_umumiy' ? renderSAOverview() : ''}
+  ${state.tab==='sa_requests' ? renderSARequests() : ''}
   ${state.tab==='sa_users' ? renderSAUsers() : ''}
   ${state.tab==='sa_muassasa' ? renderSAInstitutions() : ''}
   <div class="tabs">
-    <button class="tab ${state.tab==='sa_umumiy'?'active':''}" data-tab="sa_umumiy">${svgIcon('home')}<span>Umumiy</span></button>
-    <button class="tab ${state.tab==='sa_users'?'active':''}" data-tab="sa_users">${svgIcon('users')}<span>Foydalanuvchilar</span></button>
-    <button class="tab ${state.tab==='sa_muassasa'?'active':''}" data-tab="sa_muassasa">${svgIcon('speaker')}<span>Muassasalar</span></button>
+    <button class="tab ${state.tab==='sa_umumiy'?'active':''}" data-tab="sa_umumiy">${svgIcon('home')}<span>${t('tab_umumiy')}</span></button>
+    <button class="tab ${state.tab==='sa_requests'?'active':''}" data-tab="sa_requests">${(state.adminData.pendingAdmins||[]).length?'<span class="dot"></span>':''}${svgIcon('speaker')}<span>So'rovlar</span></button>
+    <button class="tab ${state.tab==='sa_users'?'active':''}" data-tab="sa_users">${svgIcon('users')}<span>${t('tab_users')}</span></button>
+    <button class="tab ${state.tab==='sa_muassasa'?'active':''}" data-tab="sa_muassasa">${svgIcon('speaker')}<span>${t('tab_muassasa')}</span></button>
   </div>
   `;
+}
+
+function renderSARequests(){
+  const pending = state.adminData.pendingAdmins || [];
+  return `
+  <div class="sheet sheet-plum">
+    <div class="eyebrow">Tasdiqlash kutayotgan muassasalar (${pending.length})</div>
+    ${pending.length ? pending.map(u=>`
+      <div class="req-item">
+        <div class="item-title">${escapeHtml(u.ism)}</div>
+        <div class="item-meta" style="margin-bottom:8px;">${escapeHtml(u.email)} · ${escapeHtml(MUASSASA_LABEL[u.muassasa]||u.muassasa)} · ${escapeHtml(u.muassasaNomi)}</div>
+        <div class="item-meta" style="margin-bottom:10px;">${escapeHtml(u.viloyat||'')}${u.tuman?', '+escapeHtml(u.tuman):''}</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-small btn-plum" data-approve-inst="${escapeHtml(u.email)}">✓ Tasdiqlash</button>
+          <button class="btn-small btn-danger" data-reject-inst="${escapeHtml(u.email)}">✕ Rad etish</button>
+        </div>
+      </div>
+    `).join('') : `<div class="empty">${svgIcon('speaker')}<div>Hozircha kutayotgan so'rov yo'q.</div></div>`}
+  </div>`;
 }
 
 function renderSAOverview(){
@@ -196,7 +244,10 @@ function renderSAUsers(){
     <div class="plan-item">
       <div class="item-top">
         <div><div class="item-title">${escapeHtml(u.ism)}</div><div class="item-meta">${escapeHtml(u.email)} ${u.muassasaNomi?'· '+escapeHtml(u.muassasaNomi):''} ${u.sinf?'· '+escapeHtml(u.sinf):''}</div></div>
-        <button class="btn-small btn-danger" data-sa-del="${escapeHtml(u.email)}">O'chirish</button>
+        <div style="display:flex;align-items:center;gap:6px;">
+          ${u.role==='admin' ? `<span class="badge ${u.approved?'':'rep'}">${u.approved?'tasdiqlangan':'kutilmoqda'}</span>` : ''}
+          <button class="btn-small btn-danger" data-sa-del="${escapeHtml(u.email)}">O'chirish</button>
+        </div>
       </div>
     </div>
   `).join('') : `<div class="empty">Yo'q.</div>`;
@@ -251,6 +302,8 @@ function attachDashboardHandlers(){
       superDeleteUser(email);
     }
   }));
+  document.querySelectorAll('[data-approve-inst]').forEach(b=> b.addEventListener('click', ()=> approveInstitution(b.dataset.approveInst)));
+  document.querySelectorAll('[data-reject-inst]').forEach(b=> b.addEventListener('click', ()=> rejectInstitution(b.dataset.rejectInst)));
 }
 
 render();
