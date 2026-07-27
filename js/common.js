@@ -115,9 +115,22 @@ window.storage = {
   },
   async list(prefix, shared){
     try{
-      const snap = await _db.collection('kv').get();
+      // MUHIM: avval bu yerda butun 'kv' kolleksiyasi (_db.collection('kv').get())
+      // to'liq yuklab olinar, keyin faqat prefiksga mos kelganlari filtrlanardi.
+      // Bu ham sekin (kolleksiya kattalashgani sayin qimmatlashadi), ham xavfli edi:
+      // Firestore xavfsizlik qoidalari endi hujjatga bog'liq (egasiga qarab) bo'lgani
+      // uchun, prefiksisiz to'liq skanerlash so'rovi qoidalar tomonidan rad etiladi.
+      // O'rniga faqat kerakli prefiks oralig'ini so'raymiz — bu ham tezroq,
+      // ham qoidalar bilan mos ("range query on documentId").
+      let q = _db.collection('kv');
+      if(prefix){
+        q = q.orderBy(firebase.firestore.FieldPath.documentId())
+             .startAt(prefix)
+             .endAt(prefix + '\uf8ff');
+      }
+      const snap = await q.get();
       const keys = [];
-      snap.forEach(doc=>{ if(!prefix || doc.id.startsWith(prefix)) keys.push(doc.id); });
+      snap.forEach(doc=>{ keys.push(doc.id); });
       return { keys, prefix, shared: !!shared };
     }catch(e){ console.error('storage.list', e); return null; }
   }
