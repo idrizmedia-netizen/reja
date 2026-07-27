@@ -796,11 +796,11 @@ function institutionFieldsHtml(role, prefix){
   const nomiName = role === 'talaba' ? 'muassasaNomi' : 'muassasaNomiAdmin';
   const h = MUASSASA_HINTS.maktab;
   return `
-    <label>Viloyat</label>
+    <label>${t('lbl_viloyat')}</label>
     <select name="${prefix}viloyat" class="viloyat-select" required>
       ${viloyatOptionsHtml('')}
     </select>
-    <label>Tuman / shahar</label>
+    <label>${t('lbl_tuman')}</label>
     <select name="${prefix}tuman" class="tuman-select" required>
       <option value="">— Avval viloyatni tanlang —</option>
     </select>
@@ -811,11 +811,11 @@ function institutionFieldsHtml(role, prefix){
       <option value="kasb-hunar">Kasb-hunar maktabi</option>
       <option value="universitet">Universitet / institut</option>
     </select>
-    <label>Muassasa raqami / nomi</label>
+    <label>${t('lbl_muassasa_raqami')}</label>
     <input type="text" name="${nomiName}" class="muassasa-nomi-input" placeholder="${h.ph}" required>
     <div class="note muassasa-hint" style="margin-top:-8px;">${h.hint}</div>
     ${role==='talaba' ? `
-    <label>Sinf / kurs</label>
+    <label>${t('lbl_sinf')}</label>
     <input type="text" name="sinf" placeholder="Masalan: 9-sinf yoki 2-kurs" required>
     ` : `
     <div class="note" style="margin-top:8px;">O'quvchilaringiz ro'yxatdan o'tishda xuddi shu viloyat, tuman va muassasa raqami/nomini <strong>harfma-harf bir xil</strong> kiritishi kerak — shundagina e'lonlaringizni ko'rishadi.</div>
@@ -841,7 +841,7 @@ function renderAuth(){
     <div class="sheet sheet-plum">
       <div class="eyebrow">Ro'yxatni yakunlang</div>
       <p>Google hisobingiz tasdiqlandi (<strong>${escapeHtml(pg.email)}</strong>). Davom etish uchun quyidagi maydonlarni to'ldiring.</p>
-      <label style="margin-top:0;">Siz kimsiz?</label>
+      <label style="margin-top:0;">${t('lbl_siz_kimsiz')}</label>
       <div class="segrow">
         <button type="button" class="seg role-btn ${role==='talaba'?'on':''}" data-role="talaba">O'quvchi / talaba</button>
         <button type="button" class="seg role-btn ${role==='ota_ona'?'on':''}" data-role="ota_ona">Ota-ona</button>
@@ -859,7 +859,7 @@ function renderAuth(){
       <div class="eyebrow">Parolni tiklash</div>
       <p>Ro'yxatdan o'tgan emailingizni kiriting — parolni tiklash havolasini yuboramiz.</p>
       <form id="forgotForm">
-        <label>Email</label>
+        <label>${t('lbl_email')}</label>
         <input type="email" name="femail" placeholder="ism@misol.uz" required>
         <div id="auth-err" class="err"></div>
         <button class="btn-primary" type="submit">Havola yuborish</button>
@@ -877,9 +877,9 @@ function renderAuth(){
       <div style="text-align:center;color:var(--ink-soft);font-size:11.5px;margin:14px 0;">— yoki email bilan —</div>` : ''}
       ${isLogin ? `
       <form id="loginForm">
-        <label>Email</label>
+        <label>${t('lbl_email')}</label>
         <input type="email" name="email" placeholder="ism@misol.uz" required>
-        <label>Parol</label>
+        <label>${t('lbl_parol')}</label>
         <input type="password" name="parol" placeholder="Parolingiz" required>
         <div id="auth-err" class="err"></div>
         <button class="btn-primary" type="submit">${t('kirish')}</button>
@@ -887,18 +887,18 @@ function renderAuth(){
       <button class="btn-ghost" id="toForgot" style="margin-top:10px;">${t('parolni_unutdingiz')}</button>
       <button class="btn-ghost" id="toRegister" style="margin-top:2px;display:block;">Hisobingiz yo'qmi? Ro'yxatdan o'ting</button>
       ` : `
-      <label style="margin-top:0;">Kim sifatida ro'yxatdan o'tasiz?</label>
+      <label style="margin-top:0;">${t('lbl_kim_royxat')}</label>
       <div class="segrow">
         <button type="button" class="seg role-btn ${role==='talaba'?'on':''}" data-role="talaba">O'quvchi / talaba</button>
         <button type="button" class="seg role-btn ${role==='ota_ona'?'on':''}" data-role="ota_ona">Ota-ona</button>
         <button type="button" class="seg role-btn ${role==='admin'?'on':''}" data-role="admin">Muassasa</button>
       </div>
       <form id="registerForm">
-        <label>Ism va familiya</label>
+        <label>${t('lbl_ism_familiya')}</label>
         <input type="text" name="ism" placeholder="Ism Familiya" required>
-        <label>Email</label>
+        <label>${t('lbl_email')}</label>
         <input type="email" name="email" placeholder="ism@misol.uz" required>
-        <label>Parol</label>
+        <label>${t('lbl_parol')}</label>
         <input type="password" name="parol" placeholder="Kamida 6 ta belgi" required minlength="6">
         ${institutionFieldsHtml(role, '')}
         <div id="auth-err" class="err"></div>
@@ -1288,7 +1288,7 @@ function renderProfile(){
         <button class="seg ${u.reminderMode==='bir_marta'?'on':''}" id="modeBirMarta">Kuniga bir marta</button>
         <button class="seg ${u.reminderMode==='har_dars'?'on':''}" id="modeHarDars">Har dars oldidan</button>
       </div>
-      <label style="margin-top:16px;">Brauzer bildirishnomasi</label>
+      <label style="margin-top:16px;">${t('lbl_brauzer_bildirish')}</label>
       <button class="btn-small" id="notifPermBtn">${(window.Notification && Notification.permission==='granted') ? 'Yoqilgan ✓' : 'Ruxsat berish'}</button>
     </div>
     <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">${t('chiqish')}</button>
@@ -1464,15 +1464,15 @@ function renderModal(){
     <div class="modal">
       <div class="modal-head"><h3>${editing? "Darsni tahrirlash" : "Dars qo'shish"}</h3><button class="close-x" id="modalClose">✕</button></div>
       <form id="lessonForm">
-        <label>Fan nomi</label>
+        <label>${t('lbl_fan')}</label>
         <input type="text" name="fan" placeholder="Masalan: Matematika" value="${l?escapeHtml(l.fan):''}" required>
         <div class="row2">
-          <div><label>Boshlanish</label><input type="time" name="boshlanish" value="${l?l.boshlanish:''}" required></div>
-          <div><label>Tugash</label><input type="time" name="tugash" value="${l&&l.tugash?l.tugash:''}"></div>
+          <div><label>${t('lbl_boshlanish')}</label><input type="time" name="boshlanish" value="${l?l.boshlanish:''}" required></div>
+          <div><label>${t('lbl_tugash')}</label><input type="time" name="tugash" value="${l&&l.tugash?l.tugash:''}"></div>
         </div>
-        <label>Xona / auditoriya (ixtiyoriy)</label>
+        <label>${t('lbl_xona')}</label>
         <input type="text" name="xona" placeholder="Masalan: 204-xona" value="${l&&l.xona?escapeHtml(l.xona):''}">
-        <label>Hafta kunlari</label>
+        <label>${t('lbl_hafta_kunlari')}</label>
         <div class="chipset">
           ${KUN.map((k,i)=>`<span class="chip dow-chip ${l&&l.kunlar.includes(i)?'on':''}" data-i="${i}">${k}</span>`).join('')}
         </div>
@@ -1491,15 +1491,15 @@ function renderModal(){
     <div class="modal">
       <div class="modal-head"><h3>${editing?"Rejani tahrirlash":"Reja qo'shish"}</h3><button class="close-x" id="modalClose">✕</button></div>
       <form id="planForm">
-        <label>Turi</label>
+        <label>${t('lbl_turi')}</label>
         <select name="turi">
           ${opt('kunlik','Kunlik')}${opt('haftalik','Haftalik')}${opt('oylik','Oylik')}${opt('yillik','Yillik')}
         </select>
-        <label>Reja nomi</label>
+        <label>${t('lbl_reja_nomi')}</label>
         <input type="text" name="nom" placeholder="Masalan: Nazorat ishiga tayyorgarlik" value="${p?escapeHtml(p.nom):''}" required>
-        <label>Sana</label>
+        <label>${t('lbl_sana')}</label>
         <input type="date" name="sana" value="${p?p.sana:''}" required>
-        <label>Izoh (ixtiyoriy)</label>
+        <label>${t('lbl_izoh')}</label>
         <textarea name="izoh" rows="2" placeholder="Qo'shimcha tafsilotlar">${p&&p.izoh?escapeHtml(p.izoh):''}</textarea>
         <div id="modal-err" class="err"></div>
         <button class="btn-primary" type="submit">${editing?t('yangilash'):t('saqlash')}</button>
@@ -1516,13 +1516,13 @@ function renderModal(){
     <div class="modal">
       <div class="modal-head"><h3>${editing?"Eslatmani tahrirlash":"Eslatma qo'yish"}</h3><button class="close-x" id="modalClose">✕</button></div>
       <form id="reminderForm">
-        <label>Nima haqida eslatilsin</label>
+        <label>${t('lbl_nima_haqida')}</label>
         <input type="text" name="matn" placeholder="Masalan: Kitobni qaytarish" value="${r?escapeHtml(r.matn):''}" required>
         <div class="row2">
-          <div><label>Sana</label><input type="date" name="sana" value="${r?r.sana:''}" required></div>
-          <div><label>Vaqt</label><input type="time" name="vaqt" value="${r?r.vaqt:''}" required></div>
+          <div><label>${t('lbl_sana')}</label><input type="date" name="sana" value="${r?r.sana:''}" required></div>
+          <div><label>${t('lbl_vaqt')}</label><input type="time" name="vaqt" value="${r?r.vaqt:''}" required></div>
         </div>
-        <label>Takrorlanish</label>
+        <label>${t('lbl_takrorlanish')}</label>
         <select name="takrorlanish">
           ${opt('bir_marta','Bir marta')}${opt('kunlik','Har kuni')}${opt('haftalik','Har hafta')}${opt('oylik','Har oy')}${opt('yillik','Har yili')}
         </select>
@@ -1540,13 +1540,13 @@ function renderModal(){
     <div class="modal">
       <div class="modal-head"><h3>${editing?"Bahoni tahrirlash":"Baho qo'shish"}</h3><button class="close-x" id="modalClose">✕</button></div>
       <form id="gradeForm">
-        <label>Fan nomi</label>
+        <label>${t('lbl_fan')}</label>
         <input type="text" name="fan" placeholder="Masalan: Matematika" value="${g?escapeHtml(g.fan):''}" required>
-        <label>Baho</label>
+        <label>${t('lbl_baho')}</label>
         <input type="text" name="baho" placeholder="Masalan: 5 yoki 92%" value="${g?escapeHtml(g.baho):''}" required>
-        <label>Sana</label>
+        <label>${t('lbl_sana')}</label>
         <input type="date" name="sana" value="${g?g.sana:todayISO()}" required>
-        <label>Izoh (ixtiyoriy)</label>
+        <label>${t('lbl_izoh')}</label>
         <input type="text" name="izoh" placeholder="Masalan: nazorat ishi" value="${g&&g.izoh?escapeHtml(g.izoh):''}">
         <div id="modal-err" class="err"></div>
         <button class="btn-primary" type="submit">${editing?t('yangilash'):t('saqlash')}</button>
@@ -1562,11 +1562,11 @@ function renderModal(){
     <div class="modal">
       <div class="modal-head"><h3>${editing?"Uy vazifasini tahrirlash":"Uy vazifasi qo'shish"}</h3><button class="close-x" id="modalClose">✕</button></div>
       <form id="homeworkForm">
-        <label>Fan nomi</label>
+        <label>${t('lbl_fan')}</label>
         <input type="text" name="fan" placeholder="Masalan: Ona tili" value="${h?escapeHtml(h.fan):''}" required>
-        <label>Vazifa</label>
+        <label>${t('lbl_vazifa')}</label>
         <input type="text" name="matn" placeholder="Masalan: 45-mashq" value="${h?escapeHtml(h.matn):''}" required>
-        <label>Topshirish muddati</label>
+        <label>${t('lbl_muddat')}</label>
         <input type="date" name="muddat" value="${h?h.muddat:''}" required>
         <div id="modal-err" class="err"></div>
         <button class="btn-primary" type="submit">${editing?t('yangilash'):t('saqlash')}</button>
@@ -1582,26 +1582,26 @@ function renderModal(){
     <div class="modal">
       <div class="modal-head"><h3>Profilni tahrirlash</h3><button class="close-x" id="modalClose">✕</button></div>
       <form id="editProfileForm">
-        <label>Ism va familiya</label>
+        <label>${t('lbl_ism_familiya')}</label>
         <input type="text" name="ism" value="${escapeHtml(u.ism)}" required>
         ${(u.role==='talaba'||u.role==='admin') ? `
-        <label>Viloyat</label>
+        <label>${t('lbl_viloyat')}</label>
         <select name="viloyat" class="viloyat-select" required>
           ${viloyatOptionsHtml(u.viloyat||'')}
         </select>
-        <label>Tuman / shahar</label>
+        <label>${t('lbl_tuman')}</label>
         <select name="tuman" class="tuman-select" required>
           <option value="">— Tanlang —</option>
           ${(HUDUDLAR[u.viloyat]||[]).map(t=>`<option value="${t}" ${u.tuman===t?'selected':''}>${t}</option>`).join('')}
         </select>
-        <label>${u.role==='talaba'?"Ta'lim muassasasi turi":'Muassasa turi'}</label>
+        <label>${u.role==='talaba'?t('lbl_muassasa_turi_talaba'):t('lbl_muassasa_turi')}</label>
         <select name="muassasa" class="muassasa-turi-select" required>
           ${opt('maktab','Maktab')}${opt('litsey','Akademik litsey')}${opt('kasb-hunar','Kasb-hunar maktabi')}${opt('universitet','Universitet / institut')}
         </select>
-        <label>Muassasa raqami / nomi</label>
+        <label>${t('lbl_muassasa_raqami')}</label>
         <input type="text" name="muassasaNomi" class="muassasa-nomi-input" value="${escapeHtml(u.muassasaNomi||'')}" required>
         ${u.role==='talaba' ? `
-        <label>Sinf / kurs</label>
+        <label>${t('lbl_sinf')}</label>
         <input type="text" name="sinf" value="${escapeHtml(u.sinf||'')}" required>
         ` : ''}
         ` : ''}
@@ -1618,9 +1618,9 @@ function renderModal(){
       <div class="modal-head"><h3>Parol o'rnatish</h3><button class="close-x" id="modalClose">✕</button></div>
       <p>Hozir Google orqali kirasiz. Bu yerda parol o'rnatsangiz, keyinchalik email va parol bilan ham kira olasiz.</p>
       <form id="setPasswordForm">
-        <label>Yangi parol</label>
+        <label>${t('lbl_yangi_parol')}</label>
         <input type="password" name="parol" placeholder="Kamida 6 ta belgi" required>
-        <label>Parolni takrorlang</label>
+        <label>${t('lbl_parol_takror')}</label>
         <input type="password" name="parol2" placeholder="Parolni qayta yozing" required>
         <div id="modal-err" class="err"></div>
         <button class="btn-primary btn-plum" type="submit">${t('saqlash')}</button>
@@ -1633,7 +1633,7 @@ function renderModal(){
     <div class="modal">
       <div class="modal-head"><h3>Farzand qo'shish</h3><button class="close-x" id="modalClose">✕</button></div>
       <form id="addChildForm">
-        <label>Farzandingizning emaili</label>
+        <label>${t('lbl_farzand_email')}</label>
         <input type="email" name="childEmail" placeholder="farzand@misol.uz" required>
         <div class="note">Farzandingiz shu ilovada allaqachon ro'yxatdan o'tgan bo'lishi kerak. So'rov yuboriladi va u tasdiqlagach bog'lanasiz.</div>
         <div id="modal-err" class="err"></div>
@@ -1651,15 +1651,15 @@ function renderModal(){
     <div class="modal">
       <div class="modal-head"><h3>${editing?"Rejani tahrirlash":"Farzand uchun reja"}</h3><button class="close-x" id="modalClose">✕</button></div>
       <form id="parentPlanForm">
-        <label>Turi</label>
+        <label>${t('lbl_turi')}</label>
         <select name="turi">
           ${opt('kunlik','Kunlik')}${opt('haftalik','Haftalik')}${opt('oylik','Oylik')}${opt('yillik','Yillik')}
         </select>
-        <label>Reja nomi</label>
+        <label>${t('lbl_reja_nomi')}</label>
         <input type="text" name="nom" placeholder="Masalan: Repetitorga borish" value="${p?escapeHtml(p.nom):''}" required>
-        <label>Sana</label>
+        <label>${t('lbl_sana')}</label>
         <input type="date" name="sana" value="${p?p.sana:''}" required>
-        <label>Izoh (ixtiyoriy)</label>
+        <label>${t('lbl_izoh')}</label>
         <textarea name="izoh" rows="2">${p&&p.izoh?escapeHtml(p.izoh):''}</textarea>
         <div id="modal-err" class="err"></div>
         <button class="btn-primary btn-plum" type="submit">${editing?t('yangilash'):t('saqlash')}</button>
@@ -1677,13 +1677,13 @@ function renderModal(){
     <div class="modal">
       <div class="modal-head"><h3>${editing?"Eslatmani tahrirlash":"Farzand uchun eslatma"}</h3><button class="close-x" id="modalClose">✕</button></div>
       <form id="parentReminderForm">
-        <label>Nima haqida eslatilsin</label>
+        <label>${t('lbl_nima_haqida')}</label>
         <input type="text" name="matn" placeholder="Masalan: Sport mashg'ulotiga borish" value="${r?escapeHtml(r.matn):''}" required>
         <div class="row2">
-          <div><label>Sana</label><input type="date" name="sana" value="${r?r.sana:''}" required></div>
-          <div><label>Vaqt</label><input type="time" name="vaqt" value="${r?r.vaqt:''}" required></div>
+          <div><label>${t('lbl_sana')}</label><input type="date" name="sana" value="${r?r.sana:''}" required></div>
+          <div><label>${t('lbl_vaqt')}</label><input type="time" name="vaqt" value="${r?r.vaqt:''}" required></div>
         </div>
-        <label>Takrorlanish</label>
+        <label>${t('lbl_takrorlanish')}</label>
         <select name="takrorlanish">
           ${opt('bir_marta','Bir marta')}${opt('kunlik','Har kuni')}${opt('haftalik','Har hafta')}${opt('oylik','Har oy')}${opt('yillik','Har yili')}
         </select>
@@ -1701,9 +1701,9 @@ function renderModal(){
     <div class="modal">
       <div class="modal-head"><h3>${editing?"E'lonni tahrirlash":"E'lon joylash"}</h3><button class="close-x" id="modalClose">✕</button></div>
       <form id="announcementForm">
-        <label>Matn</label>
+        <label>${t('lbl_matn')}</label>
         <textarea name="matn" rows="4" placeholder="Barcha o'quvchilarga xabar..." required>${a?escapeHtml(a.matn):''}</textarea>
-        <label>Rasm (ixtiyoriy, maks. 4MB)</label>
+        <label>${t('lbl_rasm')}</label>
         <input type="file" name="rasm" accept="image/*">
         ${a && a.rasmUrl ? `<img src="${a.rasmUrl}" style="width:100%;border-radius:8px;margin-top:8px;">` : ''}
         <div id="upload-progress" class="item-meta" style="margin-top:6px;"></div>
