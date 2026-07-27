@@ -18,7 +18,7 @@ let state = {
   lang: 'uz',
   user: null,          // { ism, email }
   tab: 'sa_umumiy',
-  adminData: { allUsers: [], talabalar: [], otaOnalar: [], adminlar: [], muassasalar: [], pendingAdmins: [] },
+  adminData: { allUsers: [], talabalar: [], otaOnalar: [], adminlar: [], muassasalar: [], pendingAdmins: [], errorLogs: [], errorLogsLoaded: false },
   toast: null
 };
 
@@ -89,11 +89,12 @@ async function superDeleteUser(email){
   if(!acc) return;
   const keysToDelete = ['account:'+ek];
   if(acc.role==='talaba'){
-    keysToDelete.push('schedule:'+ek, 'plans:'+ek, 'reminders:'+ek, 'link_requests:'+ek, 'links_child:'+ek);
+    keysToDelete.push('schedule:'+ek, 'plans:'+ek, 'reminders:'+ek, 'grades:'+ek, 'homework:'+ek);
+    await lrDeleteAllForStudent(ek);
   } else if(acc.role==='ota_ona'){
-    keysToDelete.push('links_parent:'+ek);
+    await lrDeleteAllForParent(email);
   } else if(acc.role==='admin'){
-    keysToDelete.push('announcements:'+institutionKey(acc));
+    if(acc.muassasaNomi) await annDeleteAll(institutionKey(acc));
   }
   for(const k of keysToDelete){
     try{ await window.storage.delete(k, true); }catch(err){}
@@ -119,7 +120,26 @@ async function rejectInstitution(email){
   await superDeleteUser(email);
 }
 
-function switchTab(t){ state.tab = t; render(); }
+function switchTab(t){
+  state.tab = t;
+  if(t==='sa_errors' && !state.adminData.errorLogsLoaded){
+    loadErrorLogs().then(render);
+  } else {
+    render();
+  }
+}
+
+// Foydalanuvchilar tomonida yuz bergan JS xatoliklari (window.addEventListener
+// orqali common.js'da avtomatik yozib boriladi) — bu yerda faqat o'qib
+// ko'rsatamiz, hech qanday pullik uchinchi tomon xizmati (Sentry va h.k.)
+// kerak emas, hammasi Firestore ichida, bepul.
+async function loadErrorLogs(){
+  try{
+    const snap = await _db.collection('errorLogs').orderBy('ts','desc').limit(50).get();
+    state.adminData.errorLogs = snap.docs.map(d=>Object.assign({id:d.id}, d.data()));
+  }catch(e){ state.adminData.errorLogs = []; }
+  state.adminData.errorLogsLoaded = true;
+}
 
 function render(){
   applyTheme();
@@ -170,13 +190,31 @@ function renderDashboard(){
   ${state.tab==='sa_requests' ? renderSARequests() : ''}
   ${state.tab==='sa_users' ? renderSAUsers() : ''}
   ${state.tab==='sa_muassasa' ? renderSAInstitutions() : ''}
+  ${state.tab==='sa_errors' ? renderSAErrors() : ''}
   <div class="tabs">
     <button class="tab ${state.tab==='sa_umumiy'?'active':''}" data-tab="sa_umumiy">${svgIcon('home')}<span>${t('tab_umumiy')}</span></button>
     <button class="tab ${state.tab==='sa_requests'?'active':''}" data-tab="sa_requests">${(state.adminData.pendingAdmins||[]).length?'<span class="dot"></span>':''}${svgIcon('speaker')}<span>So'rovlar</span></button>
     <button class="tab ${state.tab==='sa_users'?'active':''}" data-tab="sa_users">${svgIcon('users')}<span>${t('tab_users')}</span></button>
     <button class="tab ${state.tab==='sa_muassasa'?'active':''}" data-tab="sa_muassasa">${svgIcon('speaker')}<span>${t('tab_muassasa')}</span></button>
+    <button class="tab ${state.tab==='sa_errors'?'active':''}" data-tab="sa_errors">${svgIcon('speaker')}<span>Xatoliklar</span></button>
   </div>
   `;
+}
+
+function renderSAErrors(){
+  const logs = state.adminData.errorLogs || [];
+  return `
+  <div class="sheet sheet-plum">
+    <div class="eyebrow">Foydalanuvchilarda yuz bergan xatoliklar (so'nggi ${logs.length})</div>
+    ${logs.length ? logs.map(l=>`
+      <div class="req-item">
+        <div class="item-title" style="color:#c0392b;">${escapeHtml(l.message||'')}</div>
+        <div class="item-meta">${l.userEmail?escapeHtml(l.userEmail)+' · ':''}${l.ts?new Date(l.ts).toLocaleString('uz-UZ'):''}</div>
+        <div class="item-meta" style="word-break:break-all;">${escapeHtml(l.url||'')}</div>
+      </div>
+    `).join('') : `<div class="empty">${svgIcon('speaker')}<div>Hozircha xatolik qayd etilmagan.</div></div>`}
+    <button class="btn-small" id="refreshErrorsBtn" style="margin-top:10px;">↻ Yangilash</button>
+  </div>`;
 }
 
 function renderSARequests(){
@@ -294,6 +332,8 @@ function attachDashboardHandlers(){
   }));
   document.querySelectorAll('[data-approve-inst]').forEach(b=> b.addEventListener('click', ()=> approveInstitution(b.dataset.approveInst)));
   document.querySelectorAll('[data-reject-inst]').forEach(b=> b.addEventListener('click', ()=> rejectInstitution(b.dataset.rejectInst)));
+  const reb = document.getElementById('refreshErrorsBtn');
+  if(reb) reb.addEventListener('click', async ()=>{ await loadErrorLogs(); render(); });
 }
 
 render();
