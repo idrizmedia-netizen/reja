@@ -233,6 +233,7 @@ async function handleRegister(e){
       acc.muassasa = f.muassasaAdmin.value;
       acc.muassasaNomi = f.muassasaNomiAdmin.value.trim();
       if(!acc.muassasaNomi){ errBox.textContent = t('err_muassasa_nomi'); return; }
+      acc.approved = false;
     }
   }
   try{
@@ -369,6 +370,7 @@ async function handleGoogleCompleteSubmit(e){
       acc.muassasa = f.muassasaAdmin.value;
       acc.muassasaNomi = f.muassasaNomiAdmin.value.trim();
       if(!acc.muassasaNomi){ errBox.textContent = t('err_muassasa_nomi'); return; }
+      acc.approved = false;
     }
   }
   await sSet(key, acc);
@@ -979,7 +981,7 @@ function renderFab(){
   if(state.user.role==='talaba' && ['jadval','rejalar','eslatma'].includes(state.tab)){
     return `<button class="fab" id="fabBtn" aria-label="Qo'shish">+</button>`;
   }
-  if(state.user.role==='admin' && state.tab==='a_elonlar'){
+  if(state.user.role==='admin' && state.tab==='a_elonlar' && state.user.approved){
     return `<button class="fab" id="fabBtn" aria-label="E'lon qo'shish">+</button>`;
   }
   if(state.user.role==='ota_ona' && state.tab==='p_farzandlar'){
@@ -1038,10 +1040,18 @@ function renderTabContent(){
     if(state.tab==='profil') return renderProfile();
   }
   if(r==='admin'){
-    if(state.tab==='a_elonlar') return renderAdminAnnouncements();
+    if(state.tab==='a_elonlar') return state.user.approved ? renderAdminAnnouncements() : renderAdminPending();
     if(state.tab==='profil') return renderProfile();
   }
   return '';
+}
+
+function renderAdminPending(){
+  return `
+  <div class="sheet sheet-plum">
+    <div class="eyebrow">Tasdiqlash kutilmoqda</div>
+    <p>Muassasangiz (<strong>${escapeHtml(state.user.muassasaNomi)}</strong>) hali tizim tomonidan tasdiqlanmagan. Tasdiqlangach, o'quvchilaringizga e'lon joylay olasiz. Iltimos, bir oz kuting.</p>
+  </div>`;
 }
 
 function renderHome(){
@@ -1317,7 +1327,7 @@ function renderProfile(){
       <div class="eyebrow">Profil</div>
       <h3 style="margin-bottom:2px;">${escapeHtml(u.ism)}</h3>
       <p style="margin-bottom:2px;">${escapeHtml(u.email)}</p>
-      <p>${MUASSASA_LABEL[u.muassasa]||''} · ${escapeHtml(u.muassasaNomi)}</p>
+      <p>${MUASSASA_LABEL[u.muassasa]||''} · ${escapeHtml(u.muassasaNomi)} <span class="badge ${u.approved?'':'rep'}">${u.approved?'tasdiqlangan':'kutilmoqda'}</span></p>
       ${u.viloyat ? `<p style="margin-top:-10px;">${escapeHtml(u.viloyat)}${u.tuman?', '+escapeHtml(u.tuman):''}</p>` : ''}
       <div class="note">${t_muassasaNote(escapeHtml(u.muassasaNomi))}</div>
       <button class="btn-small" id="editProfileBtn" style="margin-top:10px;">✎ Profilni tahrirlash</button>
