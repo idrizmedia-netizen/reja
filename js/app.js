@@ -39,7 +39,9 @@ function subtractMinutes(hm, mins){
 async function boot(){
   _auth.onAuthStateChanged(async (fbUser)=>{
     if(fbUser && fbUser.email){
-      const acc = await sGet('account:'+sanitizeKey(fbUser.email));
+      const email = fbUser.email.trim().toLowerCase();
+      if(email === OWNER_EMAIL){ window.location.href = 'admin.html'; return; }
+      const acc = await sGet('account:'+sanitizeKey(email));
       if(acc){ await loginAs(acc); return; }
     }
     if(state.view !== 'app'){
@@ -1044,7 +1046,12 @@ function renderTabContent(){
     if(state.tab==='a_elonlar') return state.user.approved ? renderAdminAnnouncements() : renderAdminPending();
     if(state.tab==='profil') return renderProfile();
   }
-  return '';
+  return `
+  <div class="sheet">
+    <div class="eyebrow">Muammo yuz berdi</div>
+    <p>Hisobingiz ma'lumotlarida nomuvofiqlik topildi (rol aniqlanmadi). Iltimos, chiqib qayta kiring. Muammo davom etsa, tizim egasi bilan bog'laning.</p>
+    <button class="btn-small btn-danger" id="fallbackLogoutBtn">${t('chiqish')}</button>
+  </div>`;
 }
 
 function renderAdminPending(){
@@ -1771,6 +1778,8 @@ function attachAppHandlers(){
   if(gc) gc.addEventListener('click', ()=> switchTab('p_farzandlar'));
   const lb = document.getElementById('logoutBtn');
   if(lb) lb.addEventListener('click', logout);
+  const flb = document.getElementById('fallbackLogoutBtn');
+  if(flb) flb.addEventListener('click', logout);
   const epb = document.getElementById('editProfileBtn');
   if(epb) epb.addEventListener('click', ()=> openModal('editProfile'));
   const spb = document.getElementById('setPasswordBtn');
