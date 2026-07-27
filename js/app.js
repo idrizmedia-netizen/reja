@@ -215,24 +215,24 @@ async function handleRegister(e){
   const parol = f.parol.value;
   const role = state.authRole;
   const errBox = document.getElementById('auth-err');
-  if(!ism || !email || parol.length < 6){ errBox.textContent = "Ism, email va kamida 6 belgili parolni to'ldiring."; return; }
+  if(!ism || !email || parol.length < 6){ errBox.textContent = t('err_ism_email_parol'); return; }
 
   let acc = { ism, email, role, authProvider: 'password', reminderMode: 'bir_marta', createdAt: Date.now() };
   if(role === 'talaba' || role === 'admin'){
     const viloyat = f.viloyat.value;
     const tuman = f.tuman.value;
-    if(!viloyat || !tuman){ errBox.textContent = "Viloyat va tuman/shaharni tanlang."; return; }
+    if(!viloyat || !tuman){ errBox.textContent = t('err_viloyat_tuman'); return; }
     acc.viloyat = viloyat;
     acc.tuman = tuman;
     if(role === 'talaba'){
       acc.muassasa = f.muassasa.value;
       acc.muassasaNomi = f.muassasaNomi.value.trim();
       acc.sinf = f.sinf.value.trim();
-      if(!acc.muassasaNomi || !acc.sinf){ errBox.textContent = "Muassasa raqami va sinf/kursni kiriting."; return; }
+      if(!acc.muassasaNomi || !acc.sinf){ errBox.textContent = t('err_muassasa_sinf'); return; }
     } else {
       acc.muassasa = f.muassasaAdmin.value;
       acc.muassasaNomi = f.muassasaNomiAdmin.value.trim();
-      if(!acc.muassasaNomi){ errBox.textContent = "Muassasa raqami/nomini kiriting."; return; }
+      if(!acc.muassasaNomi){ errBox.textContent = t('err_muassasa_nomi'); return; }
     }
   }
   try{
@@ -251,21 +251,21 @@ async function handleEditProfileSubmit(e){
   const errBox = document.getElementById('modal-err');
   const u = state.user;
   const ism = f.ism.value.trim();
-  if(!ism){ errBox.textContent = "Ismni kiriting."; return; }
+  if(!ism){ errBox.textContent = t('err_ismni_kiriting'); return; }
   u.ism = ism;
   if(u.role==='talaba' || u.role==='admin'){
     const viloyat = f.viloyat.value;
     const tuman = f.tuman.value;
     const muassasa = f.muassasa.value;
     const muassasaNomi = f.muassasaNomi.value.trim();
-    if(!viloyat || !tuman || !muassasaNomi){ errBox.textContent = "Barcha maydonlarni to'ldiring."; return; }
+    if(!viloyat || !tuman || !muassasaNomi){ errBox.textContent = t('err_barcha_maydon'); return; }
     u.viloyat = viloyat;
     u.tuman = tuman;
     u.muassasa = muassasa;
     u.muassasaNomi = muassasaNomi;
     if(u.role==='talaba'){
       const sinf = f.sinf.value.trim();
-      if(!sinf){ errBox.textContent = "Sinf/kursni kiriting."; return; }
+      if(!sinf){ errBox.textContent = t('err_sinf_kursni'); return; }
       u.sinf = sinf;
     }
   }
@@ -281,8 +281,8 @@ async function handleSetPasswordSubmit(e){
   const errBox = document.getElementById('modal-err');
   const parol = f.parol.value;
   const parol2 = f.parol2.value;
-  if(parol.length < 6){ errBox.textContent = "Parol kamida 6 ta belgidan iborat bo'lsin."; return; }
-  if(parol !== parol2){ errBox.textContent = "Parollar bir xil emas."; return; }
+  if(parol.length < 6){ errBox.textContent = t('err_parol_kamida6'); return; }
+  if(parol !== parol2){ errBox.textContent = t('err_parol_mos_emas'); return; }
   try{
     await fbLinkPassword(state.user.email, parol);
   }catch(err){
@@ -309,7 +309,7 @@ async function handleLogin(e){
     return;
   }
   const acc = await sGet('account:'+sanitizeKey(email));
-  if(!acc){ errBox.textContent = "Profil ma'lumotlari topilmadi. Iltimos, qo'llab-quvvatlash bilan bog'laning."; return; }
+  if(!acc){ errBox.textContent = t('err_profil_topilmadi'); return; }
   await loginAs(acc);
 }
 
@@ -318,7 +318,7 @@ async function handleForgotPassword(e){
   const f = e.target;
   const email = f.femail.value.trim().toLowerCase();
   const errBox = document.getElementById('auth-err');
-  if(!email){ errBox.textContent = "Emailingizni kiriting."; return; }
+  if(!email){ errBox.textContent = t('err_email_kiriting'); return; }
   try{
     await fbSendPasswordReset(email);
     state.authMode = 'login';
@@ -357,18 +357,18 @@ async function handleGoogleCompleteSubmit(e){
   if(role === 'talaba' || role === 'admin'){
     const viloyat = f.g_viloyat.value;
     const tuman = f.g_tuman.value;
-    if(!viloyat || !tuman){ errBox.textContent = "Viloyat va tuman/shaharni tanlang."; return; }
+    if(!viloyat || !tuman){ errBox.textContent = t('err_viloyat_tuman'); return; }
     acc.viloyat = viloyat;
     acc.tuman = tuman;
     if(role === 'talaba'){
       acc.muassasa = f.muassasa.value;
       acc.muassasaNomi = f.muassasaNomi.value.trim();
       acc.sinf = f.sinf.value.trim();
-      if(!acc.muassasaNomi || !acc.sinf){ errBox.textContent = "Muassasa raqami va sinf/kursni kiriting."; return; }
+      if(!acc.muassasaNomi || !acc.sinf){ errBox.textContent = t('err_muassasa_sinf'); return; }
     } else {
       acc.muassasa = f.muassasaAdmin.value;
       acc.muassasaNomi = f.muassasaNomiAdmin.value.trim();
-      if(!acc.muassasaNomi){ errBox.textContent = "Muassasa raqami/nomini kiriting."; return; }
+      if(!acc.muassasaNomi){ errBox.textContent = t('err_muassasa_nomi'); return; }
     }
   }
   await sSet(key, acc);
@@ -404,7 +404,7 @@ async function addLesson(e){
   const tugash = f.tugash.value;
   const xona = f.xona.value.trim();
   const kunlar = Array.from(f.querySelectorAll('.dow-chip.on')).map(c=>Number(c.dataset.i));
-  if(!fan || !boshlanish || !kunlar.length){ document.getElementById('modal-err').textContent = "Fan, vaqt va kamida bitta kunni tanlang."; return; }
+  if(!fan || !boshlanish || !kunlar.length){ document.getElementById('modal-err').textContent = t('err_fan_vaqt_kun'); return; }
   const editId = state.modal.editId;
   if(editId){
     const l = state.data.schedule.find(x=>x.id===editId);
@@ -430,7 +430,7 @@ async function addPlan(e){
   const nom = f.nom.value.trim();
   const sana = f.sana.value;
   const izoh = f.izoh.value.trim();
-  if(!nom || !sana){ document.getElementById('modal-err').textContent = "Nom va sanani kiriting."; return; }
+  if(!nom || !sana){ document.getElementById('modal-err').textContent = t('err_nom_sana'); return; }
   const editId = state.modal.editId;
   if(editId){
     const p = state.data.plans.find(x=>x.id===editId);
@@ -456,7 +456,7 @@ async function addReminder(e){
   const sana = f.sana.value;
   const vaqt = f.vaqt.value;
   const takrorlanish = f.takrorlanish.value;
-  if(!matn || !sana || !vaqt){ document.getElementById('modal-err').textContent = "Matn, sana va vaqtni kiriting."; return; }
+  if(!matn || !sana || !vaqt){ document.getElementById('modal-err').textContent = t('err_matn_sana_vaqt'); return; }
   const editId = state.modal.editId;
   if(editId){
     const r = state.data.reminders.find(x=>x.id===editId);
@@ -483,7 +483,7 @@ async function addGrade(e){
   const sana = f.sana.value;
   const izoh = f.izoh.value.trim();
   const editId = state.modal.editId;
-  if(!fan || !baho || !sana){ document.getElementById('modal-err').textContent = "Fan, baho va sanani kiriting."; return; }
+  if(!fan || !baho || !sana){ document.getElementById('modal-err').textContent = t('err_fan_baho_sana'); return; }
   if(editId){
     const g = state.data.grades.find(x=>x.id===editId);
     if(g) Object.assign(g, { fan, baho, sana, izoh });
@@ -507,7 +507,7 @@ async function addHomework(e){
   const matn = f.matn.value.trim();
   const muddat = f.muddat.value;
   const editId = state.modal.editId;
-  if(!fan || !matn || !muddat){ document.getElementById('modal-err').textContent = "Fan, vazifa va muddatni kiriting."; return; }
+  if(!fan || !matn || !muddat){ document.getElementById('modal-err').textContent = t('err_fan_vazifa_muddat'); return; }
   if(editId){
     const hw = state.data.homework.find(x=>x.id===editId);
     if(hw) Object.assign(hw, { fan, matn, muddat });
@@ -580,15 +580,15 @@ async function sendLinkRequest(e){
   const f = e.target;
   const childEmail = f.childEmail.value.trim().toLowerCase();
   const errBox = document.getElementById('modal-err');
-  if(!childEmail){ errBox.textContent = "Farzandingizning emailini kiriting."; return; }
+  if(!childEmail){ errBox.textContent = t('err_farzand_email'); return; }
   const childAcc = await sGet('account:'+sanitizeKey(childEmail));
-  if(!childAcc || childAcc.role !== 'talaba'){ errBox.textContent = "Bu email bilan o'quvchi/talaba hisobi topilmadi."; return; }
+  if(!childAcc || childAcc.role !== 'talaba'){ errBox.textContent = t('err_talaba_topilmadi'); return; }
   const reqKey = 'link_requests:'+sanitizeKey(childEmail);
   const reqs = await sGet(reqKey) || [];
-  if(reqs.some(r=> r.parentEmail===state.user.email && r.status==='pending')){ errBox.textContent = "So'rov allaqachon yuborilgan, javobni kuting."; return; }
+  if(reqs.some(r=> r.parentEmail===state.user.email && r.status==='pending')){ errBox.textContent = t('err_sorov_yuborilgan'); return; }
   const parentKey = sanitizeKey(state.user.email);
   const already = await sGet('links_parent:'+parentKey) || [];
-  if(already.includes(childEmail)){ errBox.textContent = "Bu farzand allaqachon bog'langan."; return; }
+  if(already.includes(childEmail)){ errBox.textContent = t('err_farzand_bog'); return; }
   reqs.push({ id: uid(), parentEmail: state.user.email, parentName: state.user.ism, status:'pending', createdAt: Date.now() });
   await sSet(reqKey, reqs);
   closeModal();
@@ -629,7 +629,7 @@ async function parentAddPlan(e){
   const turi = f.turi.value;
   const izoh = f.izoh.value.trim();
   const errBox = document.getElementById('modal-err');
-  if(!nom || !sana){ errBox.textContent = "Nom va sanani kiriting."; return; }
+  if(!nom || !sana){ errBox.textContent = t('err_nom_sana'); return; }
   const key = 'plans:'+sanitizeKey(childEmail);
   const plans = await sGet(key) || [];
   if(editId){
@@ -671,7 +671,7 @@ async function parentAddReminder(e){
   const vaqt = f.vaqt.value;
   const takrorlanish = f.takrorlanish.value;
   const errBox = document.getElementById('modal-err');
-  if(!matn || !sana || !vaqt){ errBox.textContent = "Matn, sana va vaqtni kiriting."; return; }
+  if(!matn || !sana || !vaqt){ errBox.textContent = t('err_matn_sana_vaqt'); return; }
   const key = 'reminders:'+sanitizeKey(childEmail);
   const rems = await sGet(key) || [];
   if(editId){
@@ -731,7 +731,7 @@ async function postAnnouncement(e){
   const matn = f.matn.value.trim();
   const errBox = document.getElementById('modal-err');
   const progressBox = document.getElementById('upload-progress');
-  if(!matn){ errBox.textContent = "E'lon matnini kiriting."; return; }
+  if(!matn){ errBox.textContent = t('err_elon_matni'); return; }
   const key = 'announcements:'+institutionKey(state.user);
   const editId = state.modal.editId;
   let list = await sGet(key) || [];
@@ -852,7 +852,7 @@ function renderAuth(){
         <div id="auth-err" class="err"></div>
         <button class="btn-primary btn-plum" type="submit">Yakunlash va kirish</button>
       </form>
-      <button class="btn-ghost" id="cancelGoogleComplete" style="margin-top:12px;">← Bekor qilish</button>
+      <button class="btn-ghost" id="cancelGoogleComplete" style="margin-top:12px;">← ${t('bekor_qilish')}</button>
     </div>
     ` : isForgot ? `
     <div class="sheet sheet-ruled">
@@ -1299,13 +1299,13 @@ function renderProfile(){
     <div class="sheet">
       <div class="eyebrow">Profil</div>
       <h3 style="margin-bottom:2px;">${escapeHtml(u.ism)}</h3>
-      <p>${escapeHtml(u.email)} · Ota-ona hisobi</p>
+      <p>${escapeHtml(u.email)} · ${t('ota_ona_hisobi')}</p>
       <button class="btn-small" id="editProfileBtn">✎ Profilni tahrirlash</button>
       ${u.authProvider==='google' ? `<button class="btn-small btn-plum" id="setPasswordBtn" style="margin-left:6px;">🔑 Parol o'rnatish</button>` : ''}
     </div>
     <div class="sheet">
-      <div class="eyebrow">Farzand qo'shish</div>
-      <p>Farzandingiz avval o'zi ro'yxatdan o'tgan bo'lishi kerak. Uning emailini kiritib so'rov yuboring, u tasdiqlagach bog'lanasiz.</p>
+      <div class="eyebrow">${t('farzand_qoshish')}</div>
+      <p>${t('farzand_qoshish_izoh')}</p>
       <button class="btn-small btn-plum" id="addChildBtn2">Farzand qo'shish</button>
     </div>
     <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">${t('chiqish')}</button>
@@ -1319,7 +1319,7 @@ function renderProfile(){
       <p style="margin-bottom:2px;">${escapeHtml(u.email)}</p>
       <p>${MUASSASA_LABEL[u.muassasa]||''} · ${escapeHtml(u.muassasaNomi)}</p>
       ${u.viloyat ? `<p style="margin-top:-10px;">${escapeHtml(u.viloyat)}${u.tuman?', '+escapeHtml(u.tuman):''}</p>` : ''}
-      <div class="note">O'quvchilar ro'yxatdan o'tishda "${escapeHtml(u.muassasaNomi)}" nomini kiritishsa, sizning e'lonlaringizni ko'radi.</div>
+      <div class="note">${t_muassasaNote(escapeHtml(u.muassasaNomi))}</div>
       <button class="btn-small" id="editProfileBtn" style="margin-top:10px;">✎ Profilni tahrirlash</button>
       ${u.authProvider==='google' ? `<button class="btn-small btn-plum" id="setPasswordBtn" style="margin-left:6px;">🔑 Parol o'rnatish</button>` : ''}
     </div>
@@ -1477,7 +1477,7 @@ function renderModal(){
           ${KUN.map((k,i)=>`<span class="chip dow-chip ${l&&l.kunlar.includes(i)?'on':''}" data-i="${i}">${k}</span>`).join('')}
         </div>
         <div id="modal-err" class="err"></div>
-        <button class="btn-primary" type="submit">${editing?'Yangilash':'Saqlash'}</button>
+        <button class="btn-primary" type="submit">${editing?t('yangilash'):t('saqlash')}</button>
       </form>
     </div>
   </div>`;
@@ -1502,7 +1502,7 @@ function renderModal(){
         <label>Izoh (ixtiyoriy)</label>
         <textarea name="izoh" rows="2" placeholder="Qo'shimcha tafsilotlar">${p&&p.izoh?escapeHtml(p.izoh):''}</textarea>
         <div id="modal-err" class="err"></div>
-        <button class="btn-primary" type="submit">${editing?'Yangilash':'Saqlash'}</button>
+        <button class="btn-primary" type="submit">${editing?t('yangilash'):t('saqlash')}</button>
       </form>
     </div>
   </div>`;
@@ -1527,7 +1527,7 @@ function renderModal(){
           ${opt('bir_marta','Bir marta')}${opt('kunlik','Har kuni')}${opt('haftalik','Har hafta')}${opt('oylik','Har oy')}${opt('yillik','Har yili')}
         </select>
         <div id="modal-err" class="err"></div>
-        <button class="btn-primary" type="submit">${editing?'Yangilash':'Saqlash'}</button>
+        <button class="btn-primary" type="submit">${editing?t('yangilash'):t('saqlash')}</button>
       </form>
     </div>
   </div>`;
@@ -1549,7 +1549,7 @@ function renderModal(){
         <label>Izoh (ixtiyoriy)</label>
         <input type="text" name="izoh" placeholder="Masalan: nazorat ishi" value="${g&&g.izoh?escapeHtml(g.izoh):''}">
         <div id="modal-err" class="err"></div>
-        <button class="btn-primary" type="submit">${editing?'Yangilash':'Saqlash'}</button>
+        <button class="btn-primary" type="submit">${editing?t('yangilash'):t('saqlash')}</button>
       </form>
     </div>
   </div>`;
@@ -1569,7 +1569,7 @@ function renderModal(){
         <label>Topshirish muddati</label>
         <input type="date" name="muddat" value="${h?h.muddat:''}" required>
         <div id="modal-err" class="err"></div>
-        <button class="btn-primary" type="submit">${editing?'Yangilash':'Saqlash'}</button>
+        <button class="btn-primary" type="submit">${editing?t('yangilash'):t('saqlash')}</button>
       </form>
     </div>
   </div>`;
@@ -1606,7 +1606,7 @@ function renderModal(){
         ` : ''}
         ` : ''}
         <div id="modal-err" class="err"></div>
-        <button class="btn-primary" type="submit">Saqlash</button>
+        <button class="btn-primary" type="submit">${t('saqlash')}</button>
       </form>
     </div>
   </div>`;
@@ -1623,7 +1623,7 @@ function renderModal(){
         <label>Parolni takrorlang</label>
         <input type="password" name="parol2" placeholder="Parolni qayta yozing" required>
         <div id="modal-err" class="err"></div>
-        <button class="btn-primary btn-plum" type="submit">Saqlash</button>
+        <button class="btn-primary btn-plum" type="submit">${t('saqlash')}</button>
       </form>
     </div>
   </div>`;
@@ -1662,7 +1662,7 @@ function renderModal(){
         <label>Izoh (ixtiyoriy)</label>
         <textarea name="izoh" rows="2">${p&&p.izoh?escapeHtml(p.izoh):''}</textarea>
         <div id="modal-err" class="err"></div>
-        <button class="btn-primary btn-plum" type="submit">${editing?'Yangilash':'Saqlash'}</button>
+        <button class="btn-primary btn-plum" type="submit">${editing?t('yangilash'):t('saqlash')}</button>
       </form>
     </div>
   </div>`;
@@ -1688,7 +1688,7 @@ function renderModal(){
           ${opt('bir_marta','Bir marta')}${opt('kunlik','Har kuni')}${opt('haftalik','Har hafta')}${opt('oylik','Har oy')}${opt('yillik','Har yili')}
         </select>
         <div id="modal-err" class="err"></div>
-        <button class="btn-primary btn-plum" type="submit">${editing?'Yangilash':'Saqlash'}</button>
+        <button class="btn-primary btn-plum" type="submit">${editing?t('yangilash'):t('saqlash')}</button>
       </form>
     </div>
   </div>`;
