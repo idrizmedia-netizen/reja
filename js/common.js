@@ -180,10 +180,136 @@ window.storage = {
   }
 };
 
+// =====================================================================
+// Ota-ona bog'lanish so'rovlari — endi HAQIQIY subcollection'da
+// (linkRequests/<studentKey>/requests/<parentKey>), avvalgidek bitta
+// katta massiv-hujjatda emas. Har bir so'rov o'z hujjatiga ega bo'lgani
+// uchun, Firestore xavfsizlik qoidalari aniq egalikni tekshira oladi.
+// =====================================================================
+function linkReqCollection(studentKey){
+  return _db.collection('linkRequests').doc(studentKey).collection('requests');
+}
+
+async function lrListForStudent(studentKey){
+  try{
+    const snap = await linkReqCollection(studentKey).get();
+    return snap.docs.map(d=> Object.assign({ id: d.id }, d.data()));
+  }catch(e){ console.error('lrListForStudent', e); return []; }
+}
+
+async function lrGet(studentKey, parentKey){
+  try{
+    const doc = await linkReqCollection(studentKey).doc(parentKey).get();
+    return doc.exists ? Object.assign({ id: doc.id }, doc.data()) : null;
+  }catch(e){ console.error('lrGet', e); return null; }
+}
+
+// Yangi so'rov yaratadi (yoki avval rad etilgan so'rovni qayta faollashtiradi).
+async function lrSendOrRetry(studentKey, parentKey, parentEmail, parentName){
+  await linkReqCollection(studentKey).doc(parentKey).set({
+    parentEmail: parentEmail.toLowerCase(),
+    parentName: parentName || '',
+    studentEmail: studentKey,
+    status: 'pending',
+    createdAt: Date.now()
+  });
+}
+
+async function lrRespond(studentKey, parentKey, accept){
+  await linkReqCollection(studentKey).doc(parentKey).update({
+    status: accept ? 'accepted' : 'declined',
+    respondedAt: Date.now()
+  });
+}
+
+// Hisob o'chirilganda unga tegishli barcha so'rov hujjatlarini tozalash uchun.
+async function lrDeleteAllForStudent(studentKey){
+  try{
+    const snap = await linkReqCollection(studentKey).get();
+    const batch = _db.batch();
+    snap.docs.forEach(d=> batch.delete(d.ref));
+    await batch.commit();
+  }catch(e){ console.error('lrDeleteAllForStudent', e); }
+}
+
+async function lrDeleteAllForParent(parentEmail){
+  try{
+    const snap = await _db.collectionGroup('requests').where('parentEmail','==', parentEmail.toLowerCase()).get();
+    const batch = _db.batch();
+    snap.docs.forEach(d=> batch.delete(d.ref));
+    await batch.commit();
+  }catch(e){ console.error('lrDeleteAllForParent', e); }
+}
+
+// Ota-ona o'ziga bog'langan (status==accepted) barcha farzandlarni topadi.
+// ESLATMA: bu collectionGroup so'rov birinchi marta ishga tushganda
+// Firebase konsolida (yoki xatolik xabarida chiqqan havola orqali)
+// "parentEmail + status" uchun kompozit indeks yaratishni so'rashi mumkin —
+// shunchaki taklif qilingan havolani bosish kifoya.
+async function lrListForParent(parentEmail){
+  try{
+    const snap = await _db.collectionGroup('requests')
+      .where('parentEmail','==', parentEmail.toLowerCase())
+      .where('status','==','accepted')
+      .get();
+    return snap.docs.map(d=> Object.assign({ id: d.id }, d.data()));
+  }catch(e){ console.error('lrListForParent', e); return []; }
+}
+
+// =====================================================================
+// E'lonlar — endi har biri alohida hujjat
+// (announcements/<institutionKey>/posts/<postId>), avvalgidek bitta
+// katta massiv-hujjatda emas. Bu ham xavfsizlikni (har bir e'lonni
+// faqat o'z muallifi o'zgartira oladi), ham Firestore'ning 1MB/hujjat
+// chegarasi bilan bog'liq xavfni yo'qotadi.
+// =====================================================================
+function announcementsCollection(institutionKey){
+  return _db.collection('announcements').doc(institutionKey).collection('posts');
+}
+
+async function annList(institutionKey){
+  try{
+    const snap = await announcementsCollection(institutionKey).orderBy('createdAt','desc').get();
+    return snap.docs.map(d=> Object.assign({ id: d.id }, d.data()));
+  }catch(e){ console.error('annList', e); return []; }
+}
+
+async function annCreate(institutionKey, data){
+  const id = uid();
+  await announcementsCollection(institutionKey).doc(id).set(Object.assign({}, data, { createdAt: Date.now() }));
+  return id;
+}
+
+async function annUpdate(institutionKey, id, patch){
+  await announcementsCollection(institutionKey).doc(id).update(patch);
+}
+
+async function annDelete(institutionKey, id){
+  await announcementsCollection(institutionKey).doc(id).delete();
+}
+
+// Muassasa admini hisobi o'chirilganda uning barcha e'lonlarini tozalash uchun.
+async function annDeleteAll(institutionKey){
+  try{
+    const snap = await announcementsCollection(institutionKey).get();
+    const batch = _db.batch();
+    snap.docs.forEach(d=> batch.delete(d.ref));
+    await batch.commit();
+  }catch(e){ console.error('annDeleteAll', e); }
+}
+
 // ===== Firebase Authentication yordamchilari =====
 async function fbRegister(email, parol){
   return _auth.createUserWithEmailAndPassword(email, parol);
 }
+
+// Email tasdiqlash xati yuborish (Firebase Auth ichida bepul, tayyor funksiya).
+async function fbSendVerification(){
+  if(_auth.currentUser){
+    return _auth.currentUser.sendEmailVerification();
+  }
+}
+
 async function fbLogin(email, parol){
   return _auth.signInWithEmailAndPassword(email, parol);
 }
@@ -434,4 +560,44 @@ function t_muassasaNote(nomi){
   };
   const lang = (typeof state !== 'undefined' && state.lang) ? state.lang : 'uz';
   return map[lang] || map.uz;
+}
+
+// =====================================================================
+// Xatoliklarni kuzatish — pullik uchinchi tomon xizmati (masalan Sentry)
+// o'rniga, oddiy va bepul yechim: brauzerda yuz bergan JS xatoliklari
+// avtomatik ravishda Firestore'ning "errorLogs" kolleksiyasiga yoziladi.
+// Buni faqat tizim egasi (superadmin) admin panelning "Xatoliklar"
+// bo'limida ko'radi.
+// =====================================================================
+let _lastLoggedError = '';
+function logClientError(message, extra){
+  try{
+    const msg = String(message || 'Noma\'lum xatolik').slice(0, 500);
+    // Ketma-ket bir xil xatolikni qayta-qayta yozmaslik uchun oddiy himoya
+    // (masalan bitta buzilgan tsikl soniyasiga 100 marta bir xil xatolik
+    // chiqarishi mumkin — bularning hammasini yozish bepul kvotani
+    // keraksiz sarflaydi).
+    if(msg === _lastLoggedError) return;
+    _lastLoggedError = msg;
+    _db.collection('errorLogs').add({
+      message: msg,
+      stack: (extra && extra.stack) ? String(extra.stack).slice(0, 2000) : '',
+      url: (typeof window !== 'undefined' && window.location) ? window.location.href : '',
+      userEmail: (typeof state !== 'undefined' && state.user && state.user.email) ||
+                 (_auth.currentUser && _auth.currentUser.email) || null,
+      userAgent: (typeof navigator !== 'undefined') ? navigator.userAgent : '',
+      ts: Date.now()
+    }).catch(()=>{});
+  }catch(e){ /* xatolikni yozishning o'zi xatolik bersa, indamaymiz */ }
+}
+
+if(typeof window !== 'undefined'){
+  window.addEventListener('error', (e)=>{
+    logClientError(e.message, e.error);
+  });
+  window.addEventListener('unhandledrejection', (e)=>{
+    const reason = e.reason;
+    const msg = (reason && reason.message) ? reason.message : String(reason);
+    logClientError('unhandledrejection: ' + msg, reason);
+  });
 }
