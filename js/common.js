@@ -79,15 +79,59 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const _auth = firebase.auth();
 const _db = firebase.firestore();
-const _storage = firebase.storage ? firebase.storage() : null;
+// Firebase Storage endi ishlatilmaydi — rasm yuklash Firestore ichida
+// (base64 sifatida) amalga oshadi, pastga qarang.
 
-async function uploadImage(path, file){
-  if(!_storage) throw new Error("Firebase Storage sozlanmagan.");
-  const MAX_BYTES = 4 * 1024 * 1024;
-  if(file.size > MAX_BYTES) throw new Error("Rasm hajmi 4MB dan oshmasin.");
-  const ref = _storage.ref().child(path);
-  await ref.put(file);
-  return await ref.getDownloadURL();
+// ESLATMA: ilgari bu yerda rasm Firebase STORAGE'ga yuklanardi
+// (uploadImage → _storage.ref().put(file)). Lekin 2026-yildan boshlab
+// Firebase Storage'dan foydalanish uchun loyiha albatta pullik (Blaze)
+// rejada bo'lishi shart bo'lib qoldi. Buning o'rniga, endi rasm brauzerning
+// o'zida kichraytirilib/siqilib, oddiy matn (base64) ko'rinishida to'g'ridan
+// to'g'ri Firestore hujjatining ichiga saqlanadi — bu butunlay BEPUL va
+// Storage'ga umuman ehtiyoj qoldirmaydi, va (localStorage'dan farqli
+// o'laroq) barcha qurilmalarda ko'rinadi, chunki ma'lumot Firestore'da,
+// faqat bitta qurilmada emas.
+//
+// CHEKLOV: Firestore'da bitta hujjat 1 MB dan oshmasligi kerak, va bu
+// ilovada barcha e'lonlar bitta hujjatda saqlanadi — shuning uchun rasm
+// avtomatik kichraytiriladi (eng katta tomoni 900px) va siqiladi (JPEG,
+// sifat ~65%), bu odatda 50-150 KB atrofida chiqadi.
+function resizeImageToDataURL(file, maxDim, quality){
+  return new Promise((resolve, reject)=>{
+    if(!file.type || !file.type.startsWith('image/')){
+      reject(new Error('Faqat rasm fayllarini yuklash mumkin.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = ()=> reject(new Error('Faylni o\'qib bo\'lmadi.'));
+    reader.onload = (e)=>{
+      const img = new Image();
+      img.onerror = ()=> reject(new Error('Rasmni ochib bo\'lmadi.'));
+      img.onload = ()=>{
+        let { width, height } = img;
+        if(width > height && width > maxDim){ height = Math.round(height * maxDim / width); width = maxDim; }
+        else if(height > maxDim){ width = Math.round(width * maxDim / height); height = maxDim; }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadImage(file){
+  const MAX_ORIGINAL_BYTES = 8 * 1024 * 1024;
+  if(file.size > MAX_ORIGINAL_BYTES) throw new Error("Rasm hajmi 8MB dan oshmasin.");
+  const dataUrl = await resizeImageToDataURL(file, 900, 0.65);
+  const MAX_ENCODED_BYTES = 700 * 1024; // Firestore hujjat hajmi (1MB)ga sig'ishi uchun zaxira bilan
+  if(dataUrl.length > MAX_ENCODED_BYTES){
+    throw new Error("Rasm siqilgandan keyin ham katta chiqdi. Iltimos, boshqa (kichikroq/kam detalli) rasm tanlang.");
+  }
+  return dataUrl;
 }
 
 // window.storage'ni Firestore bilan ta'minlaymiz — app.js/admin.js hech narsani
