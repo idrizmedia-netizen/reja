@@ -2,9 +2,15 @@
 // Bu fayl index.html'dan butunlay ajratilgan. Oddiy foydalanuvchilar bu sahifani
 // bilishi yoki ko'rishi shart emas — havolasini faqat o'zingiz bilasiz.
 
-// OWNER_EMAIL common.js'da e'lon qilingan
-// Zaxira kirish kodi (Google Sign-In sozlanmagan bo'lsa ishlatiladi):
-const SUPERADMIN_CODE = 'REJA-EGASI-2026';
+// OWNER_EMAIL common.js'da e'lon qilingan.
+//
+// ESLATMA: bu yerda ilgari "SUPERADMIN_CODE" degan qattiq yozilgan maxfiy
+// kod bo'lgan va u parolsiz kirish imkonini berardi. Bu ochiq (public)
+// GitHub repo'sida yotgan oddiy JS fayl bo'lgani uchun, o'sha kodni HAR
+// KIM ko'rishi mumkin edi — demak u umuman "maxfiy" emas edi.
+// Haqiqiy xavfsizlik faqat serverda (Firestore Security Rules'da)
+// tekshirilishi kerak, shuning uchun bu yerda yagona kirish usuli sifatida
+// faqat Google Sign-In (OWNER_EMAIL bilan) qoldirildi.
 
 let state = {
   view: 'gate',       // 'gate' | 'app'
@@ -40,18 +46,6 @@ async function handleGoogleSignInClick(){
   }catch(err){
     if(errBox) errBox.textContent = fbErrorToUzbek(err);
   }
-}
-
-async function handlePasscodeSubmit(e){
-  e.preventDefault();
-  const code = e.target.code.value.trim();
-  const errBox = document.getElementById('gate-err');
-  if(code !== SUPERADMIN_CODE){ errBox.textContent = "Kod noto'g'ri. Katta-kichik harflar va chiziqchalarga (-) e'tibor bering."; return; }
-  state.user = { ism: 'Tizim egasi', email: OWNER_EMAIL };
-  state.view = 'app';
-  state.tab = 'sa_umumiy';
-  await loadSuperAdminData();
-  render();
 }
 
 function logout(){
@@ -138,28 +132,20 @@ function renderGate(){
       <div class="brand" style="font-size:24px;">Reja <span style="font-size:12px;font-weight:600;color:var(--ink-soft);vertical-align:middle;">· admin</span></div>
       <button class="theme-toggle" id="themeToggleBtn" title="Kun/tun rejimi">${svgIcon(state.theme==='dark'?'sun':'moon')}</button>
     </div>
-    <p style="margin:10px 0 24px;">Bu sahifa faqat tizim egasi uchun. Kirish uchun Google hisobingizni tasdiqlang yoki maxfiy kodni kiriting.</p>
+    <p style="margin:10px 0 24px;">Bu sahifa faqat tizim egasi uchun. Kirish uchun Google hisobingizni tasdiqlang.</p>
     <div class="sheet sheet-plum">
       <div class="eyebrow">Google orqali kirish</div>
       <button type="button" id="googleSigninBtn" class="btn-primary" style="background:#fff;color:#3c4043;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:10px;margin-top:6px;">
         <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.2-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 16 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3 16 3 9.1 7.6 6.3 14.7z"/><path fill="#4CAF50" d="M24 45c5.5 0 10.4-1.9 14.2-5.1l-6.6-5.4C29.6 36.3 27 37 24 37c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9 40.4 15.9 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.3-4.1 5.8l6.6 5.4C41.6 36 45 30.5 45 24c0-1.2-.1-2.4-.4-3.5z"/></svg>
         Google orqali kirish
       </button>
-      <div style="text-align:center;color:var(--ink-soft);font-size:11.5px;margin:14px 0;">— yoki —</div>
-      <form id="passcodeForm">
-        <label>Maxfiy kod</label>
-        <input type="text" name="code" placeholder="Kodni kiriting" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="font-family:'JetBrains Mono',monospace;letter-spacing:0.5px;">
-        <div id="gate-err" class="err"></div>
-        <button class="btn-primary btn-plum" type="submit">Kirish</button>
-      </form>
-      <div class="note">Google orqali kirish faqat oldindan sozlangan bitta Google hisobi (tizim egasi) uchun ishlaydi.</div>
+      <div id="gate-err" class="err"></div>
+      <div class="note">Bu tugma faqat oldindan sozlangan bitta Google hisobi (tizim egasi) uchun ishlaydi. Boshqa hisoblar bilan urinish rad etiladi.</div>
     </div>
   </div>`;
 }
 
 function attachGateHandlers(){
-  const pf = document.getElementById('passcodeForm');
-  if(pf) pf.addEventListener('submit', handlePasscodeSubmit);
   const ttb = document.getElementById('themeToggleBtn');
   if(ttb) ttb.addEventListener('click', toggleTheme);
   const gsb = document.getElementById('googleSigninBtn');
