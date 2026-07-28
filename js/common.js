@@ -190,6 +190,22 @@ function linkReqCollection(studentKey){
   return _db.collection('linkRequests').doc(studentKey).collection('requests');
 }
 
+// Talaba ro'yxatdan o'tganda o'zini "mavjud" deb belgilaydi — bu orqali
+// ota-onalar hali bog'lanmagan bo'lsa ham, shu email bilan talaba
+// borligini (shaxsiy ma'lumotlarsiz) tekshira oladi.
+async function studentDirAdd(studentKey){
+  try{ await _db.collection('studentDirectory').doc(studentKey).set({ exists: true }); }
+  catch(e){ console.error('studentDirAdd', e); }
+}
+async function studentDirRemove(studentKey){
+  try{ await _db.collection('studentDirectory').doc(studentKey).delete(); }
+  catch(e){ console.error('studentDirRemove', e); }
+}
+async function studentDirExists(studentKey){
+  try{ const doc = await _db.collection('studentDirectory').doc(studentKey).get(); return doc.exists; }
+  catch(e){ console.error('studentDirExists', e); return false; }
+}
+
 async function lrListForStudent(studentKey){
   try{
     const snap = await linkReqCollection(studentKey).get();
@@ -254,6 +270,43 @@ async function lrListForParent(parentEmail){
       .get();
     return snap.docs.map(d=> Object.assign({ id: d.id }, d.data()));
   }catch(e){ console.error('lrListForParent', e); return []; }
+}
+
+// =====================================================================
+// parentChildren/<parentKey>/list/<studentKey> — ota-onaga bog'langan
+// farzandlar RO'YXATI.
+//
+// ESLATMA: bu, avvalgi versiyada ishlatilgan collectionGroup('requests')
+// so'rovi o'rniga qo'shildi. Sabab: Firestore xavfsizlik qoidalari LIST
+// so'rovlari uchun shartni "isbotlab" bera olishi kerak; oddiy maydon
+// tengligi (parentEmail==...) ba'zan bunga yetarli bo'lmay, "Missing or
+// insufficient permissions" xatoligiga olib kelishi mumkin edi. Bu yerda
+// esa har bir ota-ona FAQAT o'zining pastki to'plamini so'raydi — bu har
+// doim 100% aniq va xavfsiz tekshiriladi.
+//
+// Yozuvni FAQAT talaba o'zi (status'ni 'accepted'ga o'zgartirgan paytda)
+// qiladi — va buni faqat linkRequests hujjatida haqiqatan ham
+// status=='accepted' bo'lsa qila oladi (firestore.rules'da tekshiriladi).
+// =====================================================================
+async function pcAdd(parentKey, studentKey, studentEmail){
+  try{
+    await _db.collection('parentChildren').doc(parentKey).collection('list').doc(studentKey)
+      .set({ studentEmail: studentEmail.toLowerCase(), linkedAt: Date.now() });
+  }catch(e){ console.error('pcAdd', e); }
+}
+async function pcListForParent(parentKey){
+  try{
+    const snap = await _db.collection('parentChildren').doc(parentKey).collection('list').get();
+    return snap.docs.map(d=> d.data().studentEmail);
+  }catch(e){ console.error('pcListForParent', e); return []; }
+}
+async function pcDeleteAllForParent(parentKey){
+  try{
+    const snap = await _db.collection('parentChildren').doc(parentKey).collection('list').get();
+    const batch = _db.batch();
+    snap.docs.forEach(d=> batch.delete(d.ref));
+    await batch.commit();
+  }catch(e){ console.error('pcDeleteAllForParent', e); }
 }
 
 // =====================================================================
