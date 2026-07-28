@@ -83,6 +83,7 @@ async function loginAs(acc){
   }
   state.view = 'app';
   state.tab = defaultTab();
+  if(acc.onboarded !== true){ state.showOnboarding = true; state.onboardStep = 0; }
   render();
   startEngine();
 }
@@ -845,10 +846,33 @@ async function delAnnouncement(id){
   render();
 }
 
+function renderSkeleton(){
+  const bar = (w)=>`<div class="skel-bar" style="width:${w}"></div>`;
+  return `
+  <div class="topbar"><div class="brand">Re<em>ja</em></div></div>
+  <div style="padding:16px;">
+    <div class="sheet">
+      ${bar('40%')}
+      ${bar('90%')}
+      ${bar('70%')}
+    </div>
+    <div class="sheet">
+      ${bar('30%')}
+      ${bar('85%')}
+      ${bar('60%')}
+      ${bar('75%')}
+    </div>
+  </div>
+  <style>
+    .skel-bar{height:14px;border-radius:7px;margin-bottom:10px;background:linear-gradient(90deg, var(--line) 25%, rgba(255,255,255,0.35) 37%, var(--line) 63%);background-size:400% 100%;animation:skelShine 1.4s ease-in-out infinite;}
+    @keyframes skelShine{0%{background-position:100% 50%;}100%{background-position:0 50%;}}
+  </style>`;
+}
+
 function render(){
   applyTheme();
   const app = document.getElementById('app');
-  if(state.view === 'loading'){ app.innerHTML = ''; return; }
+  if(state.view === 'loading'){ app.innerHTML = renderSkeleton(); return; }
   if(state.view === 'auth'){ app.innerHTML = renderAuth(); attachAuthHandlers(); return; }
   app.innerHTML = renderApp();
   attachAppHandlers();
@@ -1048,15 +1072,48 @@ function renderApp(){
   </div>
   ${(!state.verifyBannerDismissed && _auth.currentUser && _auth.currentUser.emailVerified===false && state.user.authProvider==='password') ? `
   <div class="sheet" style="background:#fff8e1;border-left:4px solid #f5a623;margin:0 0 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-    <div style="flex:1;min-width:200px;">✉️ Email manzilingiz hali tasdiqlanmagan. Pochtangizga yuborilgan havolani bosing.</div>
-    <button class="btn-small" id="resendVerifyBtn">Qayta yuborish</button>
-    <button class="btn-small" id="dismissVerifyBtn" style="background:transparent;">Yopish</button>
+    <div style="flex:1;min-width:200px;">✉️ ${t('email_tasdiqlanmagan')}</div>
+    <button class="btn-small" id="resendVerifyBtn">${t('qayta_yuborish')}</button>
+    <button class="btn-small" id="dismissVerifyBtn" style="background:transparent;">${t('yopish')}</button>
   </div>` : ''}
   ${renderTabContent()}
   ${state.modal ? renderModal() : ''}
+  ${state.showOnboarding ? renderOnboarding() : ''}
   ${renderFab()}
   ${renderTabs()}
   `;
+}
+
+function renderOnboarding(){
+  const key = 'onboard_' + (state.user.role || 'talaba');
+  const steps = t(key);
+  if(!Array.isArray(steps) || !steps.length) return '';
+  const i = Math.min(state.onboardStep||0, steps.length-1);
+  const s = steps[i];
+  const isLast = i === steps.length-1;
+  return `
+  <div class="modal-wrap" id="onboardOverlay">
+    <div class="modal" style="max-width:360px;text-align:center;border-radius:20px;">
+      <div style="font-size:40px;margin-bottom:8px;">${s.emoji}</div>
+      <div class="item-title" style="font-size:18px;margin-bottom:8px;">${escapeHtml(s.title)}</div>
+      <div class="item-meta" style="font-size:13.5px;line-height:1.5;margin-bottom:18px;">${escapeHtml(s.body)}</div>
+      <div style="display:flex;justify-content:center;gap:5px;margin-bottom:16px;">
+        ${steps.map((_,idx)=>`<div style="width:${idx===i?18:6}px;height:6px;border-radius:3px;background:${idx===i?'var(--accent)':'var(--line)'};transition:width .2s;"></div>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center;">
+        ${!isLast ? `<button class="btn-small" id="onboardSkipBtn" style="background:transparent;">${t('otkazib_yuborish')}</button>
+        <button class="btn-small btn-plum" id="onboardNextBtn">${t('keyingisi')}</button>` :
+        `<button class="btn-small btn-plum" id="onboardFinishBtn" style="min-width:140px;">${t('boshladik')}</button>`}
+      </div>
+    </div>
+  </div>`;
+}
+
+async function finishOnboarding(){
+  state.showOnboarding = false;
+  state.user.onboarded = true;
+  render();
+  try{ await sSet('account:'+sanitizeKey(state.user.email), state.user); }catch(e){}
 }
 
 function renderFab(){
@@ -1197,8 +1254,8 @@ function renderSchedule(){
     <div class="item-top" style="margin-bottom:2px;">
       <div class="eyebrow" style="margin-bottom:0;">Haftalik dars jadvali</div>
       <div style="display:flex;gap:6px;">
-        <button class="btn-small ${view==='list'?'btn-plum':''}" data-schedule-view="list">☰ Ro'yxat</button>
-        <button class="btn-small ${view==='grid'?'btn-plum':''}" data-schedule-view="grid">▦ Jadval</button>
+        <button class="btn-small ${view==='list'?'btn-plum':''}" data-schedule-view="list">☰ ${t('korinish_royxat')}</button>
+        <button class="btn-small ${view==='grid'?'btn-plum':''}" data-schedule-view="grid">▦ ${t('korinish_jadval')}</button>
         <button class="btn-small" data-export="jadval">⬇ CSV</button>
       </div>
     </div>
@@ -1347,7 +1404,7 @@ function renderGrades(){
     <div class="item-top" style="margin-bottom:8px;">
       <div class="eyebrow" style="margin-bottom:0;">Uy vazifalari</div>
     </div>
-    <input type="text" id="hwSearchInput" placeholder="Fan yoki matn bo'yicha qidirish..." value="${escapeHtml(state.hwFilter||'')}" style="margin-bottom:10px;">
+    <input type="text" id="hwSearchInput" placeholder="${t('qidirish_uy_vazifa')}" value="${escapeHtml(state.hwFilter||'')}" style="margin-bottom:10px;">
     ${(()=>{
       const q = (state.hwFilter||'').trim().toLowerCase();
       const filtered = q ? homework.filter(h=> (h.fan||'').toLowerCase().includes(q) || (h.matn||'').toLowerCase().includes(q)) : homework;
@@ -1367,7 +1424,7 @@ function renderGrades(){
           </div>
         </div>
       </div>
-    `).join('') : `<div class="empty">${svgIcon('plan')}<div>${q ? "Hech narsa topilmadi." : "Hali uy vazifasi kiritilmagan."}</div></div>`;
+    `).join('') : `<div class="empty">${svgIcon('plan')}<div>${q ? t('hech_narsa_topilmadi') : "Hali uy vazifasi kiritilmagan."}</div></div>`;
     })()}
     <button class="btn-small btn-plum" id="addHomeworkBtn" style="margin-top:10px;">+ Uy vazifasi qo'shish</button>
   </div>
@@ -1496,7 +1553,7 @@ function renderParentHome(){
           <div class="item-title">${escapeHtml(c.acc.ism)}</div>
         </div>
         ${lessons.length ? `<div class="item-meta">Bugun ${lessons.length} ta dars: ${lessons.map(l=>l.boshlanish+' '+l.fan).join(', ')}</div>` : `<div class="item-meta">Bugun dars kiritilmagan.</div>`}
-        <button class="btn-small" data-pdf-report="${escapeHtml(c.email)}" style="margin-top:8px;">⬇ PDF hisobot</button>
+        <button class="btn-small" data-pdf-report="${escapeHtml(c.email)}" style="margin-top:8px;">⬇ ${t('pdf_hisobot')}</button>
       </div>`;
     }).join('') : `<div class="empty">${svgIcon('users')}<div>Hali farzand bog'lanmagan. Profil orqali qo'shing.</div></div>`}
   </div>
@@ -1578,7 +1635,7 @@ function renderAdminAnnouncements(){
   return `
   <div class="sheet sheet-plum">
     <div class="eyebrow">${escapeHtml(state.user.muassasaNomi)} — e'lonlar</div>
-    ${list.length > 3 ? `<input type="text" id="annSearchInput" placeholder="E'lon matnidan qidirish..." value="${escapeHtml(state.annFilter||'')}" style="margin-bottom:10px;">` : ''}
+    ${list.length > 3 ? `<input type="text" id="annSearchInput" placeholder="${t('qidirish_elon')}" value="${escapeHtml(state.annFilter||'')}" style="margin-bottom:10px;">` : ''}
     ${filtered.length ? filtered.map(a=>`
       <div class="plan-item">
         ${a.rasmUrl?`<img src="${a.rasmUrl}" style="width:100%;border-radius:8px;margin-bottom:8px;">`:''}
@@ -1965,6 +2022,12 @@ function attachAppHandlers(){
       if(again){ again.focus(); again.setSelectionRange(pos, pos); }
     });
   }
+  const onb = document.getElementById('onboardNextBtn');
+  if(onb) onb.addEventListener('click', ()=>{ state.onboardStep = (state.onboardStep||0) + 1; render(); });
+  const osk = document.getElementById('onboardSkipBtn');
+  if(osk) osk.addEventListener('click', finishOnboarding);
+  const ofb = document.getElementById('onboardFinishBtn');
+  if(ofb) ofb.addEventListener('click', finishOnboarding);
   document.querySelectorAll('[data-edit-plan]').forEach(b=> b.addEventListener('click', ()=> openModal('plan', { editId: b.dataset.editPlan })));
   document.querySelectorAll('[data-edit-reminder]').forEach(b=> b.addEventListener('click', ()=> openModal('reminder', { editId: b.dataset.editReminder })));
   document.querySelectorAll('[data-edit-announcement]').forEach(b=> b.addEventListener('click', ()=> openModal('announcement', { editId: b.dataset.editAnnouncement })));
