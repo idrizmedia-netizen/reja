@@ -335,12 +335,27 @@ function fbErrorToUzbek(err){
     'auth/invalid-credential': "Email yoki parol noto'g'ri.",
     'auth/too-many-requests': "Juda ko'p urinish. Biroz kutib qayta urinib ko'ring.",
     'auth/popup-closed-by-user': "Google oynasi yopib yuborildi.",
-    'auth/network-request-failed': "Internet aloqasi bilan muammo.",
+    'auth/network-request-failed': "Internet aloqasi bilan muammo. Ulanishni tekshirib, qayta urinib ko'ring.",
     'auth/provider-already-linked': "Bu hisobga parol allaqachon o'rnatilgan.",
     'auth/credential-already-in-use': "Bu parol boshqa hisobga bog'langan.",
-    'auth/requires-recent-login': "Xavfsizlik uchun qayta kirib, so'ng qayta urining."
+    'auth/requires-recent-login': "Xavfsizlik uchun qayta kirib, so'ng qayta urining.",
+    // Firestore'dan keladigan xatoliklar (masalan window.storage yoki
+    // linkRequests/announcements funksiyalari orqali) uchun ham tushunarli
+    // xabarlar:
+    'permission-denied': "Bu amalni bajarishga ruxsatingiz yo'q.",
+    'unavailable': "Server vaqtincha javob bermayapti. Birozdan keyin qayta urinib ko'ring.",
+    'resource-exhausted': "Tizim hozir band. Birozdan keyin qayta urinib ko'ring.",
+    'cancelled': "Amal bekor qilindi.",
+    'deadline-exceeded': "So'rov vaqti tugadi. Internet aloqasini tekshiring."
   };
-  return map[code] || ("Xatolik: " + (err && err.message ? err.message : "noma'lum"));
+  if(map[code]) return map[code];
+  // Noma'lum xatolik — foydalanuvchiga texnik matn (masalan "FirebaseError:
+  // Missing or insufficient permissions") ko'rsatmasdan, umumiy va
+  // tushunarli xabar beramiz; texnik tafsilotni esa konsolga va
+  // (agar mumkin bo'lsa) xatoliklar jurnaliga yozamiz.
+  try{ console.error('Firebase xatoligi:', err); }catch(e){}
+  try{ if(typeof logClientError === 'function') logClientError((err&&err.message)||'Nomalum xatolik', err); }catch(e){}
+  return "Kutilmagan xatolik yuz berdi. Iltimos, qayta urinib ko'ring.";
 }
 
 
@@ -445,7 +460,29 @@ const I18N = {
     lbl_farzand_email: "Farzandingizning emaili", lbl_yangi_parol: "Yangi parol", lbl_parol_takror: "Parolni takrorlang",
     lbl_kim_royxat: "Kim sifatida ro'yxatdan o'tasiz?", lbl_siz_kimsiz: "Siz kimsiz?",
     lbl_brauzer_bildirish: "Brauzer bildirishnomasi",
-    lbl_muassasa_turi_talaba: "Ta'lim muassasasi turi", lbl_muassasa_turi: "Muassasa turi"
+    lbl_muassasa_turi_talaba: "Ta'lim muassasasi turi", lbl_muassasa_turi: "Muassasa turi",
+    korinish_royxat: "Ro'yxat", korinish_jadval: "Jadval",
+    qidirish_uy_vazifa: "Fan yoki matn bo'yicha qidirish...", qidirish_elon: "E'lon matnidan qidirish...",
+    pdf_hisobot: "PDF hisobot", hech_narsa_topilmadi: "Hech narsa topilmadi.",
+    email_tasdiqlanmagan: "Email manzilingiz hali tasdiqlanmagan. Pochtangizga yuborilgan havolani bosing.",
+    qayta_yuborish: "Qayta yuborish", yopish: "Yopish", otkazib_yuborish: "O'tkazib yuborish",
+    keyingisi: "Keyingisi →", boshladik: "Boshladik! ✓",
+    onboard_talaba: [
+      { emoji: '👋', title: "Xush kelibsiz!", body: "Reja — dars jadvalingizni, rejalaringizni, uy vazifalaringizni va baholaringizni bir joyda saqlashga yordam beradi." },
+      { emoji: '📅', title: "Dars jadvalini kiriting", body: "\"Jadval\" bo'limida pastdagi + tugmasi orqali darslaringizni qo'shing — ilova darsdan oldin eslatib turadi." },
+      { emoji: '📚', title: "Uy vazifa va baholar", body: "\"Baholar\" bo'limida uy vazifalaringizni va baholaringizni kuzatib boring, muddatlar haqida eslatma olasiz." },
+      { emoji: '👨‍👩‍👧', title: "Ota-onangiz bilan bog'laning", body: "Ota-onangiz sizning email manzilingiz orqali so'rov yuborishi mumkin — \"Profil\" bo'limida so'rovlarni ko'rasiz va tasdiqlaysiz." }
+    ],
+    onboard_ota_ona: [
+      { emoji: '👋', title: "Xush kelibsiz!", body: "Reja orqali farzandingizning dars jadvali, uy vazifalari va baholarini kuzatib borishingiz, unga reja va eslatma qo'shishingiz mumkin." },
+      { emoji: '🔗', title: "Farzandingizni bog'lang", body: "\"Farzandlar\" bo'limida farzandingizning email manzilini kiritib, bog'lanish so'rovini yuboring. Farzandingiz tasdiqlagach, ma'lumotlari ko'rinadi." },
+      { emoji: '📊', title: "Kuzatib boring", body: "Bosh sahifada har bir farzandingiz uchun haftalik hisobotni va PDF hisobotni ko'rishingiz mumkin." }
+    ],
+    onboard_admin: [
+      { emoji: '👋', title: "Xush kelibsiz!", body: "Muassasa admin sifatida siz o'quvchilaringizga e'lonlar joylashingiz mumkin bo'ladi." },
+      { emoji: '⏳', title: "Tasdiqlashni kuting", body: "Hisobingiz hozircha tekshiruvda. Tizim egasi tasdiqlagach, e'lon joylash imkoniyati ochiladi." },
+      { emoji: '📢', title: "E'lon joylang", body: "Tasdiqlangach, \"E'lonlar\" bo'limida yangi e'lon yozib, rasm biriktirib joylashingiz mumkin — muassasangizdagi barcha o'quvchilar ko'radi." }
+    ]
   },
   ru: {
     tagline: "Расписание уроков, планы, напоминания — и связь с семьёй, в одном месте.",
@@ -490,7 +527,29 @@ const I18N = {
     lbl_farzand_email: "Email вашего ребёнка", lbl_yangi_parol: "Новый пароль", lbl_parol_takror: "Повторите пароль",
     lbl_kim_royxat: "Кем вы регистрируетесь?", lbl_siz_kimsiz: "Кто вы?",
     lbl_brauzer_bildirish: "Уведомления браузера",
-    lbl_muassasa_turi_talaba: "Тип учебного заведения", lbl_muassasa_turi: "Тип учреждения"
+    lbl_muassasa_turi_talaba: "Тип учебного заведения", lbl_muassasa_turi: "Тип учреждения",
+    korinish_royxat: "Список", korinish_jadval: "Таблица",
+    qidirish_uy_vazifa: "Поиск по предмету или тексту...", qidirish_elon: "Поиск по тексту объявления...",
+    pdf_hisobot: "PDF отчёт", hech_narsa_topilmadi: "Ничего не найдено.",
+    email_tasdiqlanmagan: "Ваш email ещё не подтверждён. Перейдите по ссылке, отправленной на почту.",
+    qayta_yuborish: "Отправить снова", yopish: "Закрыть", otkazib_yuborish: "Пропустить",
+    keyingisi: "Далее →", boshladik: "Начнём! ✓",
+    onboard_talaba: [
+      { emoji: '👋', title: "Добро пожаловать!", body: "Reja помогает хранить расписание уроков, планы, домашние задания и оценки в одном месте." },
+      { emoji: '📅', title: "Внесите расписание", body: "В разделе «Расписание» нажмите + внизу, чтобы добавить уроки — приложение напомнит перед началом." },
+      { emoji: '📚', title: "Домашние задания и оценки", body: "В разделе «Оценки» отслеживайте домашние задания и оценки, получайте напоминания о сроках." },
+      { emoji: '👨‍👩‍👧', title: "Свяжитесь с родителями", body: "Родители могут отправить запрос по вашему email — вы увидите и подтвердите его в разделе «Профиль»." }
+    ],
+    onboard_ota_ona: [
+      { emoji: '👋', title: "Добро пожаловать!", body: "С Reja вы можете следить за расписанием, домашними заданиями и оценками ребёнка, добавлять планы и напоминания." },
+      { emoji: '🔗', title: "Привяжите ребёнка", body: "В разделе «Дети» введите email ребёнка и отправьте запрос на привязку. После подтверждения появятся его данные." },
+      { emoji: '📊', title: "Следите за прогрессом", body: "На главной странице доступен недельный отчёт и PDF-отчёт по каждому ребёнку." }
+    ],
+    onboard_admin: [
+      { emoji: '👋', title: "Добро пожаловать!", body: "Как администратор учреждения вы сможете публиковать объявления для учащихся." },
+      { emoji: '⏳', title: "Ожидайте подтверждения", body: "Ваш аккаунт сейчас на проверке. После подтверждения владельцем системы откроется публикация объявлений." },
+      { emoji: '📢', title: "Публикуйте объявления", body: "После подтверждения в разделе «Объявления» вы сможете писать посты с фото — их увидят все учащиеся вашего учреждения." }
+    ]
   },
   en: {
     tagline: "Class schedule, plans, reminders — and staying connected with family, all in one place.",
@@ -535,7 +594,29 @@ const I18N = {
     lbl_farzand_email: "Your child's email", lbl_yangi_parol: "New password", lbl_parol_takror: "Repeat password",
     lbl_kim_royxat: "Who are you registering as?", lbl_siz_kimsiz: "Who are you?",
     lbl_brauzer_bildirish: "Browser notifications",
-    lbl_muassasa_turi_talaba: "Type of educational institution", lbl_muassasa_turi: "Institution type"
+    lbl_muassasa_turi_talaba: "Type of educational institution", lbl_muassasa_turi: "Institution type",
+    korinish_royxat: "List", korinish_jadval: "Grid",
+    qidirish_uy_vazifa: "Search by subject or text...", qidirish_elon: "Search announcement text...",
+    pdf_hisobot: "PDF report", hech_narsa_topilmadi: "Nothing found.",
+    email_tasdiqlanmagan: "Your email hasn't been verified yet. Click the link sent to your inbox.",
+    qayta_yuborish: "Resend", yopish: "Dismiss", otkazib_yuborish: "Skip",
+    keyingisi: "Next →", boshladik: "Let's go! ✓",
+    onboard_talaba: [
+      { emoji: '👋', title: "Welcome!", body: "Reja helps you keep your class schedule, plans, homework, and grades all in one place." },
+      { emoji: '📅', title: "Add your schedule", body: "In the \"Schedule\" tab, tap + at the bottom to add classes — the app will remind you before each one." },
+      { emoji: '📚', title: "Homework and grades", body: "In the \"Grades\" tab, track your homework and grades, and get reminders about deadlines." },
+      { emoji: '👨‍👩‍👧', title: "Connect with your parent", body: "Your parent can send a request using your email — you'll see and approve it in the \"Profile\" tab." }
+    ],
+    onboard_ota_ona: [
+      { emoji: '👋', title: "Welcome!", body: "With Reja you can follow your child's schedule, homework, and grades, and add plans and reminders for them." },
+      { emoji: '🔗', title: "Link your child", body: "In the \"Children\" tab, enter your child's email and send a link request. Once they confirm, their info will appear." },
+      { emoji: '📊', title: "Keep track", body: "On the home tab you'll find a weekly report and a PDF report for each child." }
+    ],
+    onboard_admin: [
+      { emoji: '👋', title: "Welcome!", body: "As an institution admin, you'll be able to post announcements for your students." },
+      { emoji: '⏳', title: "Wait for approval", body: "Your account is currently under review. Once the system owner approves it, posting will be unlocked." },
+      { emoji: '📢', title: "Post announcements", body: "Once approved, write posts with photos in the \"Announcements\" tab — all students at your institution will see them." }
+    ]
   }
 };
 function t(key){
