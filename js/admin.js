@@ -91,8 +91,10 @@ async function superDeleteUser(email){
   if(acc.role==='talaba'){
     keysToDelete.push('schedule:'+ek, 'plans:'+ek, 'reminders:'+ek, 'grades:'+ek, 'homework:'+ek);
     await lrDeleteAllForStudent(ek);
+    await studentDirRemove(ek);
   } else if(acc.role==='ota_ona'){
     await lrDeleteAllForParent(email);
+    await pcDeleteAllForParent(ek);
   } else if(acc.role==='admin'){
     if(acc.muassasaNomi) await annDeleteAll(institutionKey(acc));
   }
