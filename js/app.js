@@ -115,10 +115,10 @@ async function markThreadRead(partnerEmail){
 }
 
 async function loadParentChildren(){
-  const linked = await lrListForParent(state.user.email);
+  const parentKey = sanitizeKey(state.user.email);
+  const childEmails = await pcListForParent(parentKey);
   const children = [];
-  for(const r of linked){
-    const em = r.studentEmail;
+  for(const em of childEmails){
     const acc = await sGet('account:'+sanitizeKey(em));
     if(!acc) continue;
     const [sc, pl, rm, gr, hw] = await Promise.all([
@@ -262,6 +262,7 @@ async function handleRegister(e){
     return;
   }
   await sSet('account:'+sanitizeKey(email), acc);
+  if(role === 'talaba') await studentDirAdd(sanitizeKey(email));
   await loginAs(acc);
 }
 
@@ -393,6 +394,7 @@ async function handleGoogleCompleteSubmit(e){
     }
   }
   await sSet(key, acc);
+  if(role === 'talaba') await studentDirAdd(sanitizeKey(pg.email));
   state.pendingGoogle = null;
   await loginAs(acc);
 }
@@ -651,9 +653,9 @@ async function sendLinkRequest(e){
   const childEmail = f.childEmail.value.trim().toLowerCase();
   const errBox = document.getElementById('modal-err');
   if(!childEmail){ errBox.textContent = t('err_farzand_email'); return; }
-  const childAcc = await sGet('account:'+sanitizeKey(childEmail));
-  if(!childAcc || childAcc.role !== 'talaba'){ errBox.textContent = t('err_talaba_topilmadi'); return; }
   const studentKey = sanitizeKey(childEmail);
+  const exists = await studentDirExists(studentKey);
+  if(!exists){ errBox.textContent = t('err_talaba_topilmadi'); return; }
   const parentKey = sanitizeKey(state.user.email);
   const existing = await lrGet(studentKey, parentKey);
   if(existing && existing.status === 'accepted'){ errBox.textContent = t('err_farzand_bog'); return; }
@@ -661,7 +663,7 @@ async function sendLinkRequest(e){
   try{
     await lrSendOrRetry(studentKey, parentKey, state.user.email, state.user.ism);
   }catch(err){
-    errBox.textContent = "So'rov yuborishda xatolik yuz berdi.";
+    errBox.textContent = fbErrorToUzbek(err);
     return;
   }
   closeModal();
@@ -672,6 +674,7 @@ async function respondLinkRequest(parentKey, accept){
   const selfKey = sanitizeKey(state.user.email);
   try{
     await lrRespond(selfKey, parentKey, accept);
+    if(accept) await pcAdd(parentKey, selfKey, state.user.email);
   }catch(err){
     showToast("Xatolik yuz berdi, qayta urinib ko'ring.");
     return;
