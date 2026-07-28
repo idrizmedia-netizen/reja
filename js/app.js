@@ -176,6 +176,20 @@ function checkEngine(){
     }
   });
 
+  const hwKey = 'hw_daily_'+today;
+  if(hm >= '07:00' && !state.firedKeys.has(hwKey)){
+    const dueOrOverdue = (state.data.homework||[]).filter(h=> !h.bajarildi && h.muddat <= today);
+    if(dueOrOverdue.length){
+      state.firedKeys.add(hwKey);
+      const todays = dueOrOverdue.filter(h=>h.muddat===today).length;
+      const overdue = dueOrOverdue.length - todays;
+      const parts = [];
+      if(todays) parts.push(todays+" ta bugun");
+      if(overdue) parts.push(overdue+" ta kechikkan");
+      fireNotif('Uy vazifasi', parts.join(', ')+' vazifa bor.');
+    }
+  }
+
   if(mode === 'har_dars'){
     const di = dowIndex(today);
     state.data.schedule.filter(l=> l.kunlar.includes(di)).forEach(l=>{
@@ -566,6 +580,55 @@ function exportCSV(kind){
     downloadCSV('baholar.csv', rows);
   }
   showToast("Fayl yuklab olindi.");
+}
+
+// Ota-ona uchun farzand bo'yicha PDF hisobot — jsPDF orqali to'liq
+// brauzerning o'zida generatsiya qilinadi, hech qanday server kerak emas.
+function exportChildPDF(childEmail){
+  const child = (state.parentData.children||[]).find(c=>c.email===childEmail);
+  if(!child || typeof window.jspdf === 'undefined'){ showToast("Hisobot yaratib bo'lmadi."); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const r = computeWeeklyReport(child);
+  let y = 18;
+  doc.setFontSize(16);
+  doc.text('Reja — o\'quvchi hisoboti', 14, y); y += 8;
+  doc.setFontSize(11);
+  doc.text(`O'quvchi: ${child.acc.ism} (${child.email})`, 14, y); y += 6;
+  doc.text(`Sana: ${fmtDate(todayISO())}`, 14, y); y += 10;
+
+  doc.setFontSize(13);
+  doc.text("So'nggi 7 kunlik xulosa", 14, y); y += 7;
+  doc.setFontSize(10.5);
+  doc.text(`O'rtacha baho: ${r.avgGrade ?? '—'}  (${r.gradeCount} ta baho)`, 14, y); y += 6;
+  doc.text(`Uy vazifasi: ${r.doneHw}/${r.totalHw} bajarilgan, ${r.overdueHw} ta kechikkan`, 14, y); y += 6;
+  doc.text(`Yaqin eslatmalar: ${r.upcomingReminders}`, 14, y); y += 10;
+
+  doc.setFontSize(13);
+  doc.text('Baholar', 14, y); y += 7;
+  doc.setFontSize(10);
+  if((child.grades||[]).length){
+    child.grades.slice().sort((a,b)=>b.sana.localeCompare(a.sana)).forEach(g=>{
+      if(y > 275){ doc.addPage(); y = 18; }
+      doc.text(`${fmtDate(g.sana)} — ${g.fan}: ${g.baho}${g.izoh?' ('+g.izoh+')':''}`, 14, y); y += 6;
+    });
+  } else { doc.text('Hali baho kiritilmagan.', 14, y); y += 6; }
+  y += 6;
+
+  if(y > 260){ doc.addPage(); y = 18; }
+  doc.setFontSize(13);
+  doc.text('Uy vazifalari', 14, y); y += 7;
+  doc.setFontSize(10);
+  if((child.homework||[]).length){
+    child.homework.slice().sort((a,b)=>a.muddat.localeCompare(b.muddat)).forEach(h=>{
+      if(y > 275){ doc.addPage(); y = 18; }
+      const holat = h.bajarildi ? 'bajarilgan' : (h.muddat < todayISO() ? 'KECHIKKAN' : 'bajarilmagan');
+      doc.text(`${fmtDate(h.muddat)} — ${h.fan}: ${h.matn} [${holat}]`, 14, y); y += 6;
+    });
+  } else { doc.text('Hali uy vazifasi kiritilmagan.', 14, y); y += 6; }
+
+  doc.save(`${(child.acc.ism||'oquvchi').replace(/\s+/g,'_')}-hisobot.pdf`);
+  showToast('PDF hisobot yuklab olindi.');
 }
 
 async function setReminderMode(mode){
@@ -1128,10 +1191,23 @@ function renderStudentAnnouncements(){
 
 function renderSchedule(){
   const grouped = KUN_FULL.map((name,i)=> ({ name, i, lessons: state.data.schedule.filter(l=>l.kunlar.includes(i)).sort((a,b)=>a.boshlanish.localeCompare(b.boshlanish)) }));
+  const view = state.scheduleView || 'list';
   return `
   <div class="sheet">
-    <div class="item-top" style="margin-bottom:2px;"><div class="eyebrow" style="margin-bottom:0;">Haftalik dars jadvali</div><button class="btn-small" data-export="jadval">⬇ CSV</button></div>
-    ${grouped.map(g=> g.lessons.length ? `
+    <div class="item-top" style="margin-bottom:2px;">
+      <div class="eyebrow" style="margin-bottom:0;">Haftalik dars jadvali</div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn-small ${view==='list'?'btn-plum':''}" data-schedule-view="list">☰ Ro'yxat</button>
+        <button class="btn-small ${view==='grid'?'btn-plum':''}" data-schedule-view="grid">▦ Jadval</button>
+        <button class="btn-small" data-export="jadval">⬇ CSV</button>
+      </div>
+    </div>
+    ${view==='grid' ? renderScheduleGrid(grouped) : renderScheduleList(grouped)}
+  </div>`;
+}
+
+function renderScheduleList(grouped){
+  return `${grouped.map(g=> g.lessons.length ? `
       <div style="margin-bottom:14px;">
         <div style="font-weight:600;font-size:13.5px;color:var(--accent-deep);margin-bottom:4px;">${g.name}</div>
         ${g.lessons.map(l=>`
@@ -1143,7 +1219,26 @@ function renderSchedule(){
           </div>
         `).join('')}
       </div>
-    ` : '').join('') || `<div class="empty">${svgIcon('cal')}<div>Hali dars qo'shilmagan. Pastdagi + tugmasi orqali qo'shing.</div></div>`}
+    ` : '').join('') || `<div class="empty">${svgIcon('cal')}<div>Hali dars qo'shilmagan. Pastdagi + tugmasi orqali qo'shing.</div></div>`}`;
+}
+
+function renderScheduleGrid(grouped){
+  const total = grouped.reduce((a,g)=>a+g.lessons.length,0);
+  if(!total) return `<div class="empty">${svgIcon('cal')}<div>Hali dars qo'shilmagan. Pastdagi + tugmasi orqali qo'shing.</div></div>`;
+  return `
+  <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;overflow-x:auto;">
+    ${grouped.map(g=>`
+      <div style="min-width:110px;">
+        <div style="font-weight:700;font-size:11px;text-align:center;color:var(--accent-deep);margin-bottom:6px;">${g.name.slice(0,3)}</div>
+        ${g.lessons.map(l=>`
+          <div data-edit-lesson="${l.id}" style="cursor:pointer;background:var(--card-2,rgba(0,0,0,0.03));border-radius:8px;padding:6px;margin-bottom:6px;font-size:11px;">
+            <div style="font-weight:700;">${l.boshlanish}</div>
+            <div style="font-weight:600;">${escapeHtml(l.fan)}</div>
+            ${l.xona?`<div style="opacity:0.7;">${escapeHtml(l.xona)}</div>`:''}
+          </div>
+        `).join('') || '<div style="opacity:0.35;font-size:11px;text-align:center;">—</div>'}
+      </div>
+    `).join('')}
   </div>`;
 }
 
@@ -1249,8 +1344,14 @@ function renderGrades(){
     <button class="btn-small btn-accent" id="addGradeBtn" style="margin-top:10px;">+ Baho qo'shish</button>
   </div>
   <div class="sheet sheet-plum">
-    <div class="eyebrow">Uy vazifalari</div>
-    ${homework.length ? homework.map(h=>`
+    <div class="item-top" style="margin-bottom:8px;">
+      <div class="eyebrow" style="margin-bottom:0;">Uy vazifalari</div>
+    </div>
+    <input type="text" id="hwSearchInput" placeholder="Fan yoki matn bo'yicha qidirish..." value="${escapeHtml(state.hwFilter||'')}" style="margin-bottom:10px;">
+    ${(()=>{
+      const q = (state.hwFilter||'').trim().toLowerCase();
+      const filtered = q ? homework.filter(h=> (h.fan||'').toLowerCase().includes(q) || (h.matn||'').toLowerCase().includes(q)) : homework;
+      return filtered.length ? filtered.map(h=>`
       <div class="plan-item">
         <div class="item-top">
           <div style="display:flex;gap:10px;align-items:flex-start;">
@@ -1266,7 +1367,8 @@ function renderGrades(){
           </div>
         </div>
       </div>
-    `).join('') : `<div class="empty">${svgIcon('plan')}<div>Hali uy vazifasi kiritilmagan.</div></div>`}
+    `).join('') : `<div class="empty">${svgIcon('plan')}<div>${q ? "Hech narsa topilmadi." : "Hali uy vazifasi kiritilmagan."}</div></div>`;
+    })()}
     <button class="btn-small btn-plum" id="addHomeworkBtn" style="margin-top:10px;">+ Uy vazifasi qo'shish</button>
   </div>
   `;
@@ -1394,6 +1496,7 @@ function renderParentHome(){
           <div class="item-title">${escapeHtml(c.acc.ism)}</div>
         </div>
         ${lessons.length ? `<div class="item-meta">Bugun ${lessons.length} ta dars: ${lessons.map(l=>l.boshlanish+' '+l.fan).join(', ')}</div>` : `<div class="item-meta">Bugun dars kiritilmagan.</div>`}
+        <button class="btn-small" data-pdf-report="${escapeHtml(c.email)}" style="margin-top:8px;">⬇ PDF hisobot</button>
       </div>`;
     }).join('') : `<div class="empty">${svgIcon('users')}<div>Hali farzand bog'lanmagan. Profil orqali qo'shing.</div></div>`}
   </div>
@@ -1470,10 +1573,13 @@ function renderParentChildren(){
 
 function renderAdminAnnouncements(){
   const list = state.adminData.announcements || [];
+  const q = (state.annFilter||'').trim().toLowerCase();
+  const filtered = q ? list.filter(a=>(a.matn||'').toLowerCase().includes(q)) : list;
   return `
   <div class="sheet sheet-plum">
     <div class="eyebrow">${escapeHtml(state.user.muassasaNomi)} — e'lonlar</div>
-    ${list.length ? list.map(a=>`
+    ${list.length > 3 ? `<input type="text" id="annSearchInput" placeholder="E'lon matnidan qidirish..." value="${escapeHtml(state.annFilter||'')}" style="margin-bottom:10px;">` : ''}
+    ${filtered.length ? filtered.map(a=>`
       <div class="plan-item">
         ${a.rasmUrl?`<img src="${a.rasmUrl}" style="width:100%;border-radius:8px;margin-bottom:8px;">`:''}
         <div class="item-top">
@@ -1484,7 +1590,7 @@ function renderAdminAnnouncements(){
           </div>
         </div>
       </div>
-    `).join('') : `<div class="empty">${svgIcon('speaker')}<div>Hali e'lon joylanmagan. Pastdagi + tugmasi orqali qo'shing.</div></div>`}
+    `).join('') : `<div class="empty">${svgIcon('speaker')}<div>${q ? "Hech narsa topilmadi." : "Hali e'lon joylanmagan. Pastdagi + tugmasi orqali qo'shing."}</div></div>`}
   </div>`;
 }
 
@@ -1805,6 +1911,7 @@ function attachAppHandlers(){
   if(gp) gp.addEventListener('click', ()=> switchTab('profil'));
   const gc = document.getElementById('goChildrenBtn');
   if(gc) gc.addEventListener('click', ()=> switchTab('p_farzandlar'));
+  document.querySelectorAll('[data-pdf-report]').forEach(b=> b.addEventListener('click', ()=> exportChildPDF(b.dataset.pdfReport)));
   const lb = document.getElementById('logoutBtn');
   if(lb) lb.addEventListener('click', logout);
   const flb = document.getElementById('fallbackLogoutBtn');
@@ -1837,6 +1944,27 @@ function attachAppHandlers(){
   document.querySelectorAll('[data-export]').forEach(b=> b.addEventListener('click', ()=> exportCSV(b.dataset.export)));
   document.querySelectorAll('[data-del-announcement]').forEach(b=> b.addEventListener('click', ()=> delAnnouncement(b.dataset.delAnnouncement)));
   document.querySelectorAll('[data-edit-lesson]').forEach(b=> b.addEventListener('click', ()=> openModal('lesson', { editId: b.dataset.editLesson })));
+  document.querySelectorAll('[data-schedule-view]').forEach(b=> b.addEventListener('click', ()=>{ state.scheduleView = b.dataset.scheduleView; render(); }));
+  const hwSearch = document.getElementById('hwSearchInput');
+  if(hwSearch){
+    hwSearch.addEventListener('input', ()=>{
+      state.hwFilter = hwSearch.value;
+      const pos = hwSearch.selectionStart;
+      render();
+      const again = document.getElementById('hwSearchInput');
+      if(again){ again.focus(); again.setSelectionRange(pos, pos); }
+    });
+  }
+  const annSearch = document.getElementById('annSearchInput');
+  if(annSearch){
+    annSearch.addEventListener('input', ()=>{
+      state.annFilter = annSearch.value;
+      const pos = annSearch.selectionStart;
+      render();
+      const again = document.getElementById('annSearchInput');
+      if(again){ again.focus(); again.setSelectionRange(pos, pos); }
+    });
+  }
   document.querySelectorAll('[data-edit-plan]').forEach(b=> b.addEventListener('click', ()=> openModal('plan', { editId: b.dataset.editPlan })));
   document.querySelectorAll('[data-edit-reminder]').forEach(b=> b.addEventListener('click', ()=> openModal('reminder', { editId: b.dataset.editReminder })));
   document.querySelectorAll('[data-edit-announcement]').forEach(b=> b.addEventListener('click', ()=> openModal('announcement', { editId: b.dataset.editAnnouncement })));
