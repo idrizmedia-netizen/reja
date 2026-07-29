@@ -143,19 +143,19 @@ window.storage = {
       const snap = await _db.collection('kv').doc(key).get();
       if(!snap.exists) return null;
       return { key, value: snap.data().value, shared: !!shared };
-    }catch(e){ console.error('storage.get', e); return null; }
+    }catch(e){ console.error('storage.get FAILED for key:', key, '—', (e&&e.code)||'', (e&&e.message)||e); return null; }
   },
   async set(key, value, shared){
     try{
       await _db.collection('kv').doc(key).set({ key, value, shared: !!shared, updatedAt: Date.now() });
       return { key, value, shared: !!shared };
-    }catch(e){ console.error('storage.set', e); return null; }
+    }catch(e){ console.error('storage.set FAILED for key:', key, '—', (e&&e.code)||'', (e&&e.message)||e); return null; }
   },
   async delete(key, shared){
     try{
       await _db.collection('kv').doc(key).delete();
       return { key, deleted: true, shared: !!shared };
-    }catch(e){ console.error('storage.delete', e); return null; }
+    }catch(e){ console.error('storage.delete FAILED for key:', key, '—', (e&&e.code)||'', (e&&e.message)||e); return null; }
   },
   async list(prefix, shared){
     try{
