@@ -58,6 +58,12 @@ async function loginAs(acc){
   state.lang = acc.lang || 'uz';
   sessionMem = acc.email;
   if(acc.role === 'talaba'){
+    // ESLATMA: "studentDirectory" xususiyati qo'shilishidan OLDIN ro'yxatdan
+    // o'tgan talabalarda bu belgi yo'q edi (faqat ro'yxatdan o'tish paytida
+    // yaratilardi). Shuning uchun har safar kirishda bu yozuvni "bor"
+    // ekanini qayta ta'minlaymiz — zararsiz va tez, ota-onalar endi bunday
+    // eski hisoblarni ham topa oladi.
+    studentDirAdd(sanitizeKey(acc.email)).catch(()=>{});
     const [sc, pl, rm, gr, hw] = await Promise.all([
       sGet('schedule:'+sanitizeKey(acc.email)),
       sGet('plans:'+sanitizeKey(acc.email)),
