@@ -58,11 +58,8 @@ function logout(){
 async function loadSuperAdminData(){
   const listRes = await window.storage.list('account:', true).catch(()=>null);
   const keys = listRes ? listRes.keys : [];
-  const users = [];
-  for(const k of keys){
-    const acc = await sGet(k);
-    if(acc) users.push(acc);
-  }
+  const fetched = await Promise.all(keys.map(k=> sGet(k)));
+  const users = fetched.filter(Boolean);
   const talabalar = users.filter(u=>u.role==='talaba');
   const otaOnalar = users.filter(u=>u.role==='ota_ona');
   const adminlar = users.filter(u=>u.role==='admin');
@@ -210,7 +207,7 @@ function renderSAErrors(){
     <div class="eyebrow">Foydalanuvchilarda yuz bergan xatoliklar (so'nggi ${logs.length})</div>
     ${logs.length ? logs.map(l=>`
       <div class="req-item">
-        <div class="item-title" style="color:#c0392b;">${escapeHtml(l.message||'')}</div>
+        <div class="item-title" style="color:var(--alert);">${escapeHtml(l.message||'')}</div>
         <div class="item-meta">${l.userEmail?escapeHtml(l.userEmail)+' · ':''}${l.ts?new Date(l.ts).toLocaleString('uz-UZ'):''}</div>
         <div class="item-meta" style="word-break:break-all;">${escapeHtml(l.url||'')}</div>
       </div>
