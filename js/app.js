@@ -2123,6 +2123,20 @@ boot().then(()=>{ if(state.user && state.user.role==='talaba') loadStudentAnnoun
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+    navigator.serviceWorker.register('service-worker.js').then((reg)=>{
+      // Sahifa ochilganda har doim yangi versiya bor-yo'qligini tekshiradi.
+      reg.update().catch(()=>{});
+    }).catch(()=>{});
+  });
+
+  // MUHIM: yangi Service Worker faollashganda (masalan biz kodni
+  // yangilaganimizda), sahifani AVTOMATIK ravishda BIR MARTA qayta
+  // yuklaydi. Shu tufayli foydalanuvchi endi "DevTools > Unregister"
+  // orqali qo'lda tozalashi shart emas — yangilanish o'zi ishlaydi.
+  let swRefreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(swRefreshing) return;
+    swRefreshing = true;
+    window.location.reload();
   });
 }
