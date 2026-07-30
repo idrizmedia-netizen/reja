@@ -103,12 +103,12 @@ function defaultTab(){
 async function computeUnread(partnerEmails, myRole){
   const lastRead = state.user.lastRead || {};
   const counts = {};
-  for(const partnerEmail of partnerEmails){
+  await Promise.all(partnerEmails.map(async (partnerEmail)=>{
     const tKey = threadKey(state.user.email, partnerEmail);
     const thread = await sGet(tKey) || [];
     const since = lastRead[tKey] || 0;
     counts[partnerEmail] = thread.filter(m=> m.from !== myRole && m.ts > since).length;
-  }
+  }));
   state.parentData.unreadByEmail = counts;
 }
 
@@ -123,10 +123,9 @@ async function markThreadRead(partnerEmail){
 async function loadParentChildren(){
   const parentKey = sanitizeKey(state.user.email);
   const childEmails = await pcListForParent(parentKey);
-  const children = [];
-  for(const em of childEmails){
+  const results = await Promise.all(childEmails.map(async (em)=>{
     const acc = await sGet('account:'+sanitizeKey(em));
-    if(!acc) continue;
+    if(!acc) return null;
     const [sc, pl, rm, gr, hw] = await Promise.all([
       sGet('schedule:'+sanitizeKey(em)),
       sGet('plans:'+sanitizeKey(em)),
@@ -134,20 +133,27 @@ async function loadParentChildren(){
       sGet('grades:'+sanitizeKey(em)),
       sGet('homework:'+sanitizeKey(em))
     ]);
-    children.push({ email: em, acc, schedule: sc||[], plans: pl||[], reminders: rm||[], grades: gr||[], homework: hw||[] });
-  }
-  state.parentData.children = children;
+    return { email: em, acc, schedule: sc||[], plans: pl||[], reminders: rm||[], grades: gr||[], homework: hw||[] };
+  }));
+  state.parentData.children = results.filter(Boolean);
 }
 
 async function saveAll(){
   const e = sanitizeKey(state.user.email);
-  await Promise.all([
+  const results = await Promise.all([
     sSet('schedule:'+e, state.data.schedule),
     sSet('plans:'+e, state.data.plans),
     sSet('reminders:'+e, state.data.reminders),
     sSet('grades:'+e, state.data.grades),
     sSet('homework:'+e, state.data.homework)
   ]);
+  // sSet xatolikda "null" qaytaradi (chetga chiqarmaydi) — shuning uchun
+  // avval bu yerda muvaffaqiyatsizlik butunlay sezilmasdan qolardi va
+  // foydalanuvchi "saqlandi" deb o'ylab, aslida ma'lumot saqlanmagan
+  // bo'lishi mumkin edi. Endi kamida ogohlantiramiz.
+  if(results.some(r=> r === null)){
+    showToast("Saqlashda xatolik yuz berdi. Internetni tekshirib, qayta urinib ko'ring.");
+  }
 }
 
 function showToast(msg){
@@ -712,7 +718,8 @@ async function parentAddPlan(e){
     plans.push({ id: uid(), turi, nom, sana, izoh, ota_onadan: true, kimdan: state.user.ism, kimdanEmail: state.user.email });
   }
   plans.sort((a,b)=>a.sana.localeCompare(b.sana));
-  await sSet(key, plans);
+  const saved = await sSet(key, plans);
+  if(!saved){ errBox.textContent = "Saqlashda xatolik yuz berdi. Qayta urinib ko'ring."; return; }
   const child = state.parentData.children.find(c=>c.email===childEmail);
   if(child) child.plans = plans;
   if(!editId){
@@ -754,7 +761,8 @@ async function parentAddReminder(e){
     rems.push({ id: uid(), matn, sana, vaqt, takrorlanish, ota_onadan: true, kimdan: state.user.ism, kimdanEmail: state.user.email });
   }
   rems.sort((a,b)=>(a.sana+a.vaqt).localeCompare(b.sana+b.vaqt));
-  await sSet(key, rems);
+  const saved = await sSet(key, rems);
+  if(!saved){ errBox.textContent = "Saqlashda xatolik yuz berdi. Qayta urinib ko'ring."; return; }
   const child = state.parentData.children.find(c=>c.email===childEmail);
   if(child) child.reminders = rems;
   if(!editId){
@@ -791,7 +799,8 @@ async function sendChat(e){
   const tKey = state.modal.tKey;
   const thread = await sGet(tKey) || [];
   thread.push({ id: uid(), from: state.modal.myRole, matn, ts: Date.now() });
-  await sSet(tKey, thread);
+  const saved = await sSet(tKey, thread);
+  if(!saved){ showToast("Xabar yuborilmadi. Qayta urinib ko'ring."); return; }
   state.modal.thread = thread;
   f.reset();
   render();
@@ -1080,7 +1089,7 @@ function renderApp(){
     </div>
   </div>
   ${(!state.verifyBannerDismissed && _auth.currentUser && _auth.currentUser.emailVerified===false && state.user.authProvider==='password') ? `
-  <div class="sheet" style="background:#fff8e1;border-left:4px solid #f5a623;margin:0 0 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+  <div class="sheet" style="background:var(--accent-soft);border-left:4px solid var(--accent);margin:0 0 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
     <div style="flex:1;min-width:200px;">✉️ ${t('email_tasdiqlanmagan')}</div>
     <button class="btn-small" id="resendVerifyBtn">${t('qayta_yuborish')}</button>
     <button class="btn-small" id="dismissVerifyBtn" style="background:transparent;">${t('yopish')}</button>
@@ -1297,7 +1306,7 @@ function renderScheduleGrid(grouped){
       <div style="min-width:110px;">
         <div style="font-weight:700;font-size:11px;text-align:center;color:var(--accent-deep);margin-bottom:6px;">${g.name.slice(0,3)}</div>
         ${g.lessons.map(l=>`
-          <div data-edit-lesson="${l.id}" style="cursor:pointer;background:var(--card-2,rgba(0,0,0,0.03));border-radius:8px;padding:6px;margin-bottom:6px;font-size:11px;">
+          <div data-edit-lesson="${l.id}" style="cursor:pointer;background:var(--paper-card);border:1px solid var(--line);border-radius:8px;padding:6px;margin-bottom:6px;font-size:11px;">
             <div style="font-weight:700;">${l.boshlanish}</div>
             <div style="font-weight:600;">${escapeHtml(l.fan)}</div>
             ${l.xona?`<div style="opacity:0.7;">${escapeHtml(l.xona)}</div>`:''}
