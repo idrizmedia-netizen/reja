@@ -309,48 +309,6 @@ async function pcDeleteAllForParent(parentKey){
   }catch(e){ console.error('pcDeleteAllForParent', e); }
 }
 
-// =====================================================================
-// E'lonlar — endi har biri alohida hujjat
-// (announcements/<institutionKey>/posts/<postId>), avvalgidek bitta
-// katta massiv-hujjatda emas. Bu ham xavfsizlikni (har bir e'lonni
-// faqat o'z muallifi o'zgartira oladi), ham Firestore'ning 1MB/hujjat
-// chegarasi bilan bog'liq xavfni yo'qotadi.
-// =====================================================================
-function announcementsCollection(institutionKey){
-  return _db.collection('announcements').doc(institutionKey).collection('posts');
-}
-
-async function annList(institutionKey){
-  try{
-    const snap = await announcementsCollection(institutionKey).orderBy('createdAt','desc').get();
-    return snap.docs.map(d=> Object.assign({ id: d.id }, d.data()));
-  }catch(e){ console.error('annList', e); return []; }
-}
-
-async function annCreate(institutionKey, data){
-  const id = uid();
-  await announcementsCollection(institutionKey).doc(id).set(Object.assign({}, data, { createdAt: Date.now() }));
-  return id;
-}
-
-async function annUpdate(institutionKey, id, patch){
-  await announcementsCollection(institutionKey).doc(id).update(patch);
-}
-
-async function annDelete(institutionKey, id){
-  await announcementsCollection(institutionKey).doc(id).delete();
-}
-
-// Muassasa admini hisobi o'chirilganda uning barcha e'lonlarini tozalash uchun.
-async function annDeleteAll(institutionKey){
-  try{
-    const snap = await announcementsCollection(institutionKey).get();
-    const batch = _db.batch();
-    snap.docs.forEach(d=> batch.delete(d.ref));
-    await batch.commit();
-  }catch(e){ console.error('annDeleteAll', e); }
-}
-
 // ===== Firebase Authentication yordamchilari =====
 async function fbRegister(email, parol){
   return _auth.createUserWithEmailAndPassword(email, parol);
@@ -473,8 +431,8 @@ const I18N = {
   uz: {
     tagline: "Dars jadvali, rejalar, eslatmalar — va oila bilan bog'lanish, bir joyda.",
     tab_bosh: "Bosh sahifa", tab_jadval: "Jadval", tab_rejalar: "Rejalar", tab_eslatma: "Eslatmalar",
-    tab_baholar: "Baholar", tab_profil: "Profil", tab_farzandlar: "Farzandlar", tab_elonlar: "E'lonlar",
-    tab_umumiy: "Umumiy", tab_users: "Foydalanuvchilar", tab_muassasa: "Muassasalar",
+    tab_baholar: "Baholar", tab_profil: "Profil", tab_farzandlar: "Farzandlar",
+    tab_umumiy: "Umumiy", tab_users: "Foydalanuvchilar",
     kirish: "Kirish", royxatdan_otish: "Ro'yxatdan o'tish", chiqish: "Chiqish",
     saqlash: "Saqlash", bekor_qilish: "Bekor qilish", yangilash: "Yangilash", tahrirlash: "Tahrirlash",
     parolni_unutdingiz: "Parolni unutdingizmi?", google_orqali: "Google orqali kirish",
@@ -540,8 +498,8 @@ const I18N = {
   ru: {
     tagline: "Расписание уроков, планы, напоминания — и связь с семьёй, в одном месте.",
     tab_bosh: "Главная", tab_jadval: "Расписание", tab_rejalar: "Планы", tab_eslatma: "Напоминания",
-    tab_baholar: "Оценки", tab_profil: "Профиль", tab_farzandlar: "Дети", tab_elonlar: "Объявления",
-    tab_umumiy: "Обзор", tab_users: "Пользователи", tab_muassasa: "Учреждения",
+    tab_baholar: "Оценки", tab_profil: "Профиль", tab_farzandlar: "Дети",
+    tab_umumiy: "Обзор", tab_users: "Пользователи",
     kirish: "Войти", royxatdan_otish: "Регистрация", chiqish: "Выйти",
     saqlash: "Сохранить", bekor_qilish: "Отмена", yangilash: "Обновить", tahrirlash: "Изменить",
     parolni_unutdingiz: "Забыли пароль?", google_orqali: "Войти через Google",
@@ -607,8 +565,8 @@ const I18N = {
   en: {
     tagline: "Class schedule, plans, reminders — and staying connected with family, all in one place.",
     tab_bosh: "Home", tab_jadval: "Schedule", tab_rejalar: "Plans", tab_eslatma: "Reminders",
-    tab_baholar: "Grades", tab_profil: "Profile", tab_farzandlar: "Children", tab_elonlar: "Announcements",
-    tab_umumiy: "Overview", tab_users: "Users", tab_muassasa: "Institutions",
+    tab_baholar: "Grades", tab_profil: "Profile", tab_farzandlar: "Children",
+    tab_umumiy: "Overview", tab_users: "Users",
     kirish: "Log in", royxatdan_otish: "Sign up", chiqish: "Log out",
     saqlash: "Save", bekor_qilish: "Cancel", yangilash: "Refresh", tahrirlash: "Edit",
     parolni_unutdingiz: "Forgot password?", google_orqali: "Sign in with Google",
