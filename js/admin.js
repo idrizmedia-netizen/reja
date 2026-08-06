@@ -18,7 +18,7 @@ let state = {
   lang: 'uz',
   user: null,          // { ism, email }
   tab: 'sa_umumiy',
-  adminData: { allUsers: [], talabalar: [], otaOnalar: [], adminlar: [], muassasalar: [], pendingAdmins: [], errorLogs: [], errorLogsLoaded: false },
+  adminData: { allUsers: [], talabalar: [], otaOnalar: [], errorLogs: [], errorLogsLoaded: false },
   toast: null
 };
 
@@ -62,22 +62,7 @@ async function loadSuperAdminData(){
   const users = fetched.filter(Boolean);
   const talabalar = users.filter(u=>u.role==='talaba');
   const otaOnalar = users.filter(u=>u.role==='ota_ona');
-  const adminlar = users.filter(u=>u.role==='admin');
-  const pendingAdmins = adminlar.filter(u=>!u.approved);
-  const muassasalar = [];
-  const seenKeys = new Set();
-  // ESLATMA: avval bu yerda faqat "talabalar" ro'yxati aylantirilardi, shuning
-  // uchun agar muassasada hali birorta ham talaba ro'yxatdan o'tmagan bo'lsa
-  // (lekin muassasa admini allaqachon bor bo'lsa), o'sha muassasa "Muassasalar"
-  // bo'limida umuman ko'rinmasdi. Endi adminlar ham hisobga olinadi.
-  [...talabalar, ...adminlar].forEach(u=>{
-    if(!u.muassasaNomi) return;
-    const k = institutionKey(u);
-    if(seenKeys.has(k)) return;
-    seenKeys.add(k);
-    muassasalar.push({ key: k, viloyat: u.viloyat||'', tuman: u.tuman||'', muassasaNomi: u.muassasaNomi });
-  });
-  state.adminData = { allUsers: users, talabalar, otaOnalar, adminlar, muassasalar, pendingAdmins };
+  state.adminData = Object.assign({}, state.adminData, { allUsers: users, talabalar, otaOnalar });
 }
 
 async function superDeleteUser(email){
@@ -92,8 +77,6 @@ async function superDeleteUser(email){
   } else if(acc.role==='ota_ona'){
     await lrDeleteAllForParent(email);
     await pcDeleteAllForParent(ek);
-  } else if(acc.role==='admin'){
-    if(acc.muassasaNomi) await annDeleteAll(institutionKey(acc));
   }
   for(const k of keysToDelete){
     try{ await window.storage.delete(k, true); }catch(err){}
@@ -101,22 +84,6 @@ async function superDeleteUser(email){
   await loadSuperAdminData();
   render();
   showToast("Hisob o'chirildi.");
-}
-
-async function approveInstitution(email){
-  const key = 'account:'+sanitizeKey(email);
-  const acc = await sGet(key);
-  if(!acc) return;
-  acc.approved = true;
-  await sSet(key, acc);
-  await loadSuperAdminData();
-  render();
-  showToast(escapeHtml(acc.muassasaNomi||acc.ism)+" tasdiqlandi.");
-}
-
-async function rejectInstitution(email){
-  if(!confirm("Bu muassasa so'rovini rad etib, hisobni butunlay o'chirmoqchimisiz?")) return;
-  await superDeleteUser(email);
 }
 
 function switchTab(t){
@@ -186,15 +153,11 @@ function renderDashboard(){
     </div>
   </div>
   ${state.tab==='sa_umumiy' ? renderSAOverview() : ''}
-  ${state.tab==='sa_requests' ? renderSARequests() : ''}
   ${state.tab==='sa_users' ? renderSAUsers() : ''}
-  ${state.tab==='sa_muassasa' ? renderSAInstitutions() : ''}
   ${state.tab==='sa_errors' ? renderSAErrors() : ''}
   <div class="tabs">
     <button class="tab ${state.tab==='sa_umumiy'?'active':''}" data-tab="sa_umumiy">${svgIcon('home')}<span>${t('tab_umumiy')}</span></button>
-    <button class="tab ${state.tab==='sa_requests'?'active':''}" data-tab="sa_requests">${(state.adminData.pendingAdmins||[]).length?'<span class="dot"></span>':''}${svgIcon('speaker')}<span>So'rovlar</span></button>
     <button class="tab ${state.tab==='sa_users'?'active':''}" data-tab="sa_users">${svgIcon('users')}<span>${t('tab_users')}</span></button>
-    <button class="tab ${state.tab==='sa_muassasa'?'active':''}" data-tab="sa_muassasa">${svgIcon('speaker')}<span>${t('tab_muassasa')}</span></button>
     <button class="tab ${state.tab==='sa_errors'?'active':''}" data-tab="sa_errors">${svgIcon('speaker')}<span>Xatoliklar</span></button>
   </div>
   `;
@@ -216,25 +179,6 @@ function renderSAErrors(){
   </div>`;
 }
 
-function renderSARequests(){
-  const pending = state.adminData.pendingAdmins || [];
-  return `
-  <div class="sheet sheet-plum">
-    <div class="eyebrow">Tasdiqlash kutayotgan muassasalar (${pending.length})</div>
-    ${pending.length ? pending.map(u=>`
-      <div class="req-item">
-        <div class="item-title">${escapeHtml(u.ism)}</div>
-        <div class="item-meta" style="margin-bottom:8px;">${escapeHtml(u.email)} · ${escapeHtml(MUASSASA_LABEL[u.muassasa]||u.muassasa)} · ${escapeHtml(u.muassasaNomi)}</div>
-        <div class="item-meta" style="margin-bottom:10px;">${escapeHtml(u.viloyat||'')}${u.tuman?', '+escapeHtml(u.tuman):''}</div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn-small btn-plum" data-approve-inst="${escapeHtml(u.email)}">✓ Tasdiqlash</button>
-          <button class="btn-small btn-danger" data-reject-inst="${escapeHtml(u.email)}">✕ Rad etish</button>
-        </div>
-      </div>
-    `).join('') : `<div class="empty">${svgIcon('speaker')}<div>Hozircha kutayotgan so'rov yo'q.</div></div>`}
-  </div>`;
-}
-
 function renderSAOverview(){
   const d = state.adminData;
   const stat = (n,label)=> `<div style="flex:1;text-align:center;"><div style="font-family:'Fraunces',serif;font-size:26px;font-weight:600;">${n}</div><div class="item-meta">${label}</div></div>`;
@@ -244,8 +188,6 @@ function renderSAOverview(){
     <div style="display:flex;padding:6px 0 4px;">
       ${stat((d.talabalar||[]).length, "O'quvchi/talaba")}
       ${stat((d.otaOnalar||[]).length, "Ota-ona")}
-      ${stat((d.adminlar||[]).length, "Muassasa admin")}
-      ${stat((d.muassasalar||[]).length, "Muassasa")}
     </div>
   </div>
   <div class="sheet">
@@ -254,7 +196,7 @@ function renderSAOverview(){
       <div class="plan-item">
         <div class="item-top">
           <div><div class="item-title">${escapeHtml(u.ism)}</div><div class="item-meta">${escapeHtml(u.email)}</div></div>
-          <span class="badge ${u.role==='talaba'?'':(u.role==='ota_ona'?'parent':'rep')}">${u.role==='talaba'?"talaba":u.role==='ota_ona'?'ota-ona':'muassasa'}</span>
+          <span class="badge ${u.role==='talaba'?'':'parent'}">${u.role==='talaba'?"talaba":'ota-ona'}</span>
         </div>
       </div>
     `).join('') || `<div class="empty">Hali hech kim ro'yxatdan o'tmagan.</div>`}
@@ -272,7 +214,6 @@ function renderSAUsers(){
       <div class="item-top">
         <div><div class="item-title">${escapeHtml(u.ism)}</div><div class="item-meta">${escapeHtml(u.email)} ${u.muassasaNomi?'· '+escapeHtml(u.muassasaNomi):''} ${u.sinf?'· '+escapeHtml(u.sinf):''}</div></div>
         <div style="display:flex;align-items:center;gap:6px;">
-          ${u.role==='admin' ? `<span class="badge ${u.approved?'':'rep'}">${u.approved?'tasdiqlangan':'kutilmoqda'}</span>` : ''}
           <button class="btn-small btn-danger" data-sa-del="${escapeHtml(u.email)}">O'chirish</button>
         </div>
       </div>
@@ -286,31 +227,6 @@ function renderSAUsers(){
   <div class="sheet sheet-plum">
     <div class="eyebrow">Ota-onalar (${(d.otaOnalar||[]).length})</div>
     ${section(d.otaOnalar||[])}
-  </div>
-  <div class="sheet">
-    <div class="eyebrow">Muassasa adminlari (${(d.adminlar||[]).length})</div>
-    ${section(d.adminlar||[])}
-  </div>
-  `;
-}
-
-function renderSAInstitutions(){
-  const d = state.adminData;
-  const muassasalar = d.muassasalar || [];
-  return `
-  <div class="sheet">
-    <div class="eyebrow">Ro'yxatdagi muassasalar (${muassasalar.length})</div>
-    ${muassasalar.length ? muassasalar.map(m=>{
-      const count = (d.talabalar||[]).filter(u=>institutionKey(u)===m.key).length;
-      const hasAdmin = (d.adminlar||[]).some(a=>institutionKey(a)===m.key);
-      return `
-      <div class="plan-item">
-        <div class="item-top">
-          <div><div class="item-title">${escapeHtml(m.muassasaNomi)}</div><div class="item-meta">${escapeHtml(m.viloyat)}, ${escapeHtml(m.tuman)} · ${count} ta o'quvchi</div></div>
-          <span class="badge ${hasAdmin?'':'rep'}">${hasAdmin?'admin bor':"admin yo'q"}</span>
-        </div>
-      </div>`;
-    }).join('') : `<div class="empty">Hali muassasa nomi kiritilmagan.</div>`}
   </div>
   `;
 }
@@ -329,8 +245,6 @@ function attachDashboardHandlers(){
       superDeleteUser(email);
     }
   }));
-  document.querySelectorAll('[data-approve-inst]').forEach(b=> b.addEventListener('click', ()=> approveInstitution(b.dataset.approveInst)));
-  document.querySelectorAll('[data-reject-inst]').forEach(b=> b.addEventListener('click', ()=> rejectInstitution(b.dataset.rejectInst)));
   const reb = document.getElementById('refreshErrorsBtn');
   if(reb) reb.addEventListener('click', async ()=>{ await loadErrorLogs(); render(); });
 }
