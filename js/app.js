@@ -1,4 +1,4 @@
-// ===== Reja: asosiy ilova (o'quvchi / ota-ona / muassasa) =====
+// ===== Reja: asosiy ilova (o'quvchi / ota-ona) =====
 
 let state = {
   view: 'loading',
@@ -10,7 +10,6 @@ let state = {
   tab: 'bosh',
   data: { schedule: [], plans: [], reminders: [], grades: [], homework: [] },
   parentData: { children: [], requests: [], unreadByEmail: {} },
-  adminData: { announcements: [] },
   toast: null,
   modal: null,
   firedKeys: new Set()
@@ -83,9 +82,6 @@ async function loginAs(acc){
   } else if(acc.role === 'ota_ona'){
     await loadParentChildren();
     await computeUnread(state.parentData.children.map(c=>c.email), 'parent');
-  } else if(acc.role === 'admin'){
-    const key = acc.muassasaNomi ? institutionKey(acc) : sanitizeKey(acc.email);
-    state.adminData.announcements = await annList(key);
   }
   state.view = 'app';
   state.tab = defaultTab();
@@ -96,7 +92,6 @@ async function loginAs(acc){
 
 function defaultTab(){
   if(state.user.role==='ota_ona') return 'p_bosh';
-  if(state.user.role==='admin') return 'a_elonlar';
   return 'bosh';
 }
 
@@ -248,23 +243,16 @@ async function handleRegister(e){
   if(!ism || !email || parol.length < 6){ errBox.textContent = t('err_ism_email_parol'); return; }
 
   let acc = { ism, email, role, authProvider: 'password', reminderMode: 'bir_marta', createdAt: Date.now() };
-  if(role === 'talaba' || role === 'admin'){
+  if(role === 'talaba'){
     const viloyat = f.viloyat.value;
     const tuman = f.tuman.value;
     if(!viloyat || !tuman){ errBox.textContent = t('err_viloyat_tuman'); return; }
     acc.viloyat = viloyat;
     acc.tuman = tuman;
-    if(role === 'talaba'){
-      acc.muassasa = f.muassasa.value;
-      acc.muassasaNomi = f.muassasaNomi.value.trim();
-      acc.sinf = f.sinf.value.trim();
-      if(!acc.muassasaNomi || !acc.sinf){ errBox.textContent = t('err_muassasa_sinf'); return; }
-    } else {
-      acc.muassasa = f.muassasaAdmin.value;
-      acc.muassasaNomi = f.muassasaNomiAdmin.value.trim();
-      if(!acc.muassasaNomi){ errBox.textContent = t('err_muassasa_nomi'); return; }
-      acc.approved = false;
-    }
+    acc.muassasa = f.muassasa.value;
+    acc.muassasaNomi = f.muassasaNomi.value.trim();
+    acc.sinf = f.sinf.value.trim();
+    if(!acc.muassasaNomi || !acc.sinf){ errBox.textContent = t('err_muassasa_sinf'); return; }
   }
   try{
     await fbRegister(email, parol);
@@ -286,7 +274,7 @@ async function handleEditProfileSubmit(e){
   const ism = f.ism.value.trim();
   if(!ism){ errBox.textContent = t('err_ismni_kiriting'); return; }
   u.ism = ism;
-  if(u.role==='talaba' || u.role==='admin'){
+  if(u.role==='talaba'){
     const viloyat = f.viloyat.value;
     const tuman = f.tuman.value;
     const muassasa = f.muassasa.value;
@@ -296,7 +284,7 @@ async function handleEditProfileSubmit(e){
     u.tuman = tuman;
     u.muassasa = muassasa;
     u.muassasaNomi = muassasaNomi;
-    if(u.role==='talaba'){
+    {
       const sinf = f.sinf.value.trim();
       if(!sinf){ errBox.textContent = t('err_sinf_kursni'); return; }
       u.sinf = sinf;
@@ -387,23 +375,16 @@ async function handleGoogleCompleteSubmit(e){
   const errBox = document.getElementById('auth-err');
   const key = 'account:'+sanitizeKey(pg.email);
   let acc = { ism: pg.ism, email: pg.email, authProvider: 'google', role, reminderMode: 'bir_marta', createdAt: Date.now() };
-  if(role === 'talaba' || role === 'admin'){
+  if(role === 'talaba'){
     const viloyat = f.g_viloyat.value;
     const tuman = f.g_tuman.value;
     if(!viloyat || !tuman){ errBox.textContent = t('err_viloyat_tuman'); return; }
     acc.viloyat = viloyat;
     acc.tuman = tuman;
-    if(role === 'talaba'){
-      acc.muassasa = f.muassasa.value;
-      acc.muassasaNomi = f.muassasaNomi.value.trim();
-      acc.sinf = f.sinf.value.trim();
-      if(!acc.muassasaNomi || !acc.sinf){ errBox.textContent = t('err_muassasa_sinf'); return; }
-    } else {
-      acc.muassasa = f.muassasaAdmin.value;
-      acc.muassasaNomi = f.muassasaNomiAdmin.value.trim();
-      if(!acc.muassasaNomi){ errBox.textContent = t('err_muassasa_nomi'); return; }
-      acc.approved = false;
-    }
+    acc.muassasa = f.muassasa.value;
+    acc.muassasaNomi = f.muassasaNomi.value.trim();
+    acc.sinf = f.sinf.value.trim();
+    if(!acc.muassasaNomi || !acc.sinf){ errBox.textContent = t('err_muassasa_sinf'); return; }
   }
   await sSet(key, acc);
   if(role === 'talaba') await studentDirAdd(sanitizeKey(pg.email));
@@ -419,7 +400,6 @@ function logout(){
   state.view = 'auth';
   state.authMode = 'login';
   state.parentData = { children: [], requests: [], unreadByEmail: {} };
-  state.adminData = { announcements: [] };
   render();
 }
 
@@ -610,6 +590,9 @@ function exportChildPDF(childEmail){
   doc.text('Reja — o\'quvchi hisoboti', 14, y); y += 8;
   doc.setFontSize(11);
   doc.text(`O'quvchi: ${child.acc.ism} (${child.email})`, 14, y); y += 6;
+  if(child.acc.muassasaNomi || child.acc.sinf){
+    doc.text(`O'quv joyi: ${child.acc.muassasaNomi||''}${child.acc.sinf?' · '+child.acc.sinf:''}`, 14, y); y += 6;
+  }
   doc.text(`Sana: ${fmtDate(todayISO())}`, 14, y); y += 10;
 
   doc.setFontSize(13);
@@ -807,63 +790,6 @@ async function sendChat(e){
   setTimeout(()=>{ const cl = document.querySelector('.chat-list'); if(cl) cl.scrollTop = cl.scrollHeight; }, 30);
 }
 
-async function postAnnouncement(e){
-  e.preventDefault();
-  const f = e.target;
-  const matn = f.matn.value.trim();
-  const errBox = document.getElementById('modal-err');
-  const progressBox = document.getElementById('upload-progress');
-  if(!matn){ errBox.textContent = t('err_elon_matni'); return; }
-  const instKey = institutionKey(state.user);
-  const editId = state.modal.editId;
-  let rasmUrl = null;
-  const file = f.rasm.files[0];
-  if(file){
-    try{
-      if(progressBox) progressBox.textContent = "Rasm siqilmoqda...";
-      rasmUrl = await uploadImage(file);
-    }catch(err){
-      errBox.textContent = err.message || "Rasmni qayta ishlashda xatolik.";
-      if(progressBox) progressBox.textContent = '';
-      return;
-    }
-  }
-  try{
-    if(editId){
-      const patch = { matn };
-      if(rasmUrl) patch.rasmUrl = rasmUrl;
-      await annUpdate(instKey, editId, patch);
-    } else {
-      await annCreate(instKey, {
-        matn,
-        sana: todayISO(),
-        adminName: state.user.ism,
-        adminEmail: state.user.email.toLowerCase(),
-        rasmUrl: rasmUrl || null
-      });
-    }
-  }catch(err){
-    errBox.textContent = "E'lonni saqlashda xatolik yuz berdi.";
-    if(progressBox) progressBox.textContent = '';
-    return;
-  }
-  state.adminData.announcements = await annList(instKey);
-  closeModal();
-  showToast(editId ? "E'lon yangilandi." : "E'lon joylandi.");
-}
-
-async function delAnnouncement(id){
-  const instKey = institutionKey(state.user);
-  try{
-    await annDelete(instKey, id);
-  }catch(err){
-    showToast("O'chirishda xatolik yuz berdi.");
-    return;
-  }
-  state.adminData.announcements = state.adminData.announcements.filter(a=>a.id!==id);
-  render();
-}
-
 function renderSkeleton(){
   const bar = (w)=>`<div class="skel-bar" style="width:${w}"></div>`;
   return `
@@ -910,10 +836,10 @@ const MUASSASA_HINTS = {
 };
 
 function institutionFieldsHtml(role, prefix){
-  if(role !== 'talaba' && role !== 'admin') return '';
-  const label = role === 'talaba' ? 'Ta\'lim muassasasi turi' : 'Muassasa turi';
-  const selName = role === 'talaba' ? 'muassasa' : 'muassasaAdmin';
-  const nomiName = role === 'talaba' ? 'muassasaNomi' : 'muassasaNomiAdmin';
+  if(role !== 'talaba') return '';
+  const label = t('lbl_muassasa_turi_talaba');
+  const selName = 'muassasa';
+  const nomiName = 'muassasaNomi';
   const h = MUASSASA_HINTS.maktab;
   return `
     <label>${t('lbl_viloyat')}</label>
@@ -934,12 +860,8 @@ function institutionFieldsHtml(role, prefix){
     <label>${t('lbl_muassasa_raqami')}</label>
     <input type="text" name="${nomiName}" class="muassasa-nomi-input" placeholder="${h.ph}" required>
     <div class="note muassasa-hint" style="margin-top:-8px;">${h.hint}</div>
-    ${role==='talaba' ? `
     <label>${t('lbl_sinf')}</label>
     <input type="text" name="sinf" placeholder="Masalan: 9-sinf yoki 2-kurs" required>
-    ` : `
-    <div class="note" style="margin-top:8px;">O'quvchilaringiz ro'yxatdan o'tishda xuddi shu viloyat, tuman va muassasa raqami/nomini <strong>harfma-harf bir xil</strong> kiritishi kerak — shundagina e'lonlaringizni ko'rishadi.</div>
-    `}
   `;
 }
 
@@ -965,7 +887,6 @@ function renderAuth(){
       <div class="segrow">
         <button type="button" class="seg role-btn ${role==='talaba'?'on':''}" data-role="talaba">O'quvchi / talaba</button>
         <button type="button" class="seg role-btn ${role==='ota_ona'?'on':''}" data-role="ota_ona">Ota-ona</button>
-        <button type="button" class="seg role-btn ${role==='admin'?'on':''}" data-role="admin">Muassasa</button>
       </div>
       <form id="googleCompleteForm">
         ${institutionFieldsHtml(role, 'g_')}
@@ -1011,7 +932,6 @@ function renderAuth(){
       <div class="segrow">
         <button type="button" class="seg role-btn ${role==='talaba'?'on':''}" data-role="talaba">O'quvchi / talaba</button>
         <button type="button" class="seg role-btn ${role==='ota_ona'?'on':''}" data-role="ota_ona">Ota-ona</button>
-        <button type="button" class="seg role-btn ${role==='admin'?'on':''}" data-role="admin">Muassasa</button>
       </div>
       <form id="registerForm">
         <label>${t('lbl_ism_familiya')}</label>
@@ -1138,9 +1058,6 @@ function renderFab(){
   if(state.user.role==='talaba' && ['jadval','rejalar','eslatma'].includes(state.tab)){
     return `<button class="fab" id="fabBtn" aria-label="Qo'shish">+</button>`;
   }
-  if(state.user.role==='admin' && state.tab==='a_elonlar' && state.user.approved){
-    return `<button class="fab" id="fabBtn" aria-label="E'lon qo'shish">+</button>`;
-  }
   if(state.user.role==='ota_ona' && state.tab==='p_farzandlar'){
     return `<button class="fab" id="fabBtn" aria-label="Farzand qo'shish">+</button>`;
   }
@@ -1171,13 +1088,6 @@ function renderTabs(){
       <button class="tab ${state.tab==='profil'?'active':''}" data-tab="profil">${svgIcon('user')}<span>${t('tab_profil')}</span></button>
     </div>`;
   }
-  if(state.user.role==='admin'){
-    return `
-    <div class="tabs">
-      <button class="tab ${state.tab==='a_elonlar'?'active':''}" data-tab="a_elonlar">${svgIcon('speaker')}<span>${t('tab_elonlar')}</span></button>
-      <button class="tab ${state.tab==='profil'?'active':''}" data-tab="profil">${svgIcon('user')}<span>${t('tab_profil')}</span></button>
-    </div>`;
-  }
   return '';
 }
 
@@ -1196,23 +1106,11 @@ function renderTabContent(){
     if(state.tab==='p_farzandlar') return renderParentChildren();
     if(state.tab==='profil') return renderProfile();
   }
-  if(r==='admin'){
-    if(state.tab==='a_elonlar') return state.user.approved ? renderAdminAnnouncements() : renderAdminPending();
-    if(state.tab==='profil') return renderProfile();
-  }
   return `
   <div class="sheet">
     <div class="eyebrow">Muammo yuz berdi</div>
     <p>Hisobingiz ma'lumotlarida nomuvofiqlik topildi (rol aniqlanmadi). Iltimos, chiqib qayta kiring. Muammo davom etsa, tizim egasi bilan bog'laning.</p>
     <button class="btn-small btn-danger" id="fallbackLogoutBtn">${t('chiqish')}</button>
-  </div>`;
-}
-
-function renderAdminPending(){
-  return `
-  <div class="sheet sheet-plum">
-    <div class="eyebrow">Tasdiqlash kutilmoqda</div>
-    <p>Muassasangiz (<strong>${escapeHtml(state.user.muassasaNomi)}</strong>) hali tizim tomonidan tasdiqlanmagan. Tasdiqlangach, o'quvchilaringizga e'lon joylay olasiz. Iltimos, bir oz kuting.</p>
   </div>`;
 }
 
@@ -1244,24 +1142,12 @@ function renderHome(){
     ${todaysPlans.map(p=>`<div class="plan-item"><div class="item-top"><div class="item-title">${escapeHtml(p.nom)}</div><span class="badge ${p.ota_onadan?'parent':''}">${p.ota_onadan?'ota-onadan':p.turi}</span></div>${p.izoh?`<div class="item-meta">${escapeHtml(p.izoh)}</div>`:''}</div>`).join('')}
     ${todaysRems.map(r=>`<div class="rem-item"><div class="item-top"><div class="item-title">${escapeHtml(r.matn)}</div><span class="badge ${r.ota_onadan?'parent':(r.takrorlanish!=='bir_marta'?'rep':'')}">${r.ota_onadan?'ota-onadan':r.vaqt}</span></div></div>`).join('')}
   </div>` : ''}
-  ${renderStudentAnnouncements()}
   <div class="sheet">
     <div class="eyebrow">Eslatma rejimi</div>
     <p style="margin-bottom:8px;">${state.user.reminderMode==='har_dars' ? 'Har darsdan 5 daqiqa oldin eslatiladi.' : "Kuniga bir marta, ertalab bugungi darslar haqida eslatiladi."}</p>
     <button class="btn-small" id="goProfileBtn">Sozlamalarni o'zgartirish →</button>
   </div>
   `;
-}
-
-function renderStudentAnnouncements(){
-  if(!state.user.muassasaNomi) return '';
-  const list = state.data._announcements || [];
-  if(!list.length) return '';
-  return `
-  <div class="sheet sheet-plum">
-    <div class="eyebrow">${escapeHtml(state.user.muassasaNomi)} — e'lonlar</div>
-    ${list.slice(0,4).map(a=>`<div class="plan-item">${a.rasmUrl?`<img src="${a.rasmUrl}" style="width:100%;border-radius:8px;margin-bottom:8px;">`:''}<div class="item-title">${escapeHtml(a.matn)}</div><div class="item-meta">${fmtDate(a.sana)} · ${escapeHtml(a.adminName)}</div></div>`).join('')}
-  </div>`;
 }
 
 function renderSchedule(){
@@ -1522,21 +1408,6 @@ function renderProfile(){
     <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">${t('chiqish')}</button>
     `;
   }
-  if(u.role==='admin'){
-    return `
-    <div class="sheet">
-      <div class="eyebrow">Profil</div>
-      <h3 style="margin-bottom:2px;">${escapeHtml(u.ism)}</h3>
-      <p style="margin-bottom:2px;">${escapeHtml(u.email)}</p>
-      <p>${MUASSASA_LABEL[u.muassasa]||''} · ${escapeHtml(u.muassasaNomi)} <span class="badge ${u.approved?'':'rep'}">${u.approved?'tasdiqlangan':'kutilmoqda'}</span></p>
-      ${u.viloyat ? `<p style="margin-top:-10px;">${escapeHtml(u.viloyat)}${u.tuman?', '+escapeHtml(u.tuman):''}</p>` : ''}
-      <div class="note">${t_muassasaNote(escapeHtml(u.muassasaNomi))}</div>
-      <button class="btn-small" id="editProfileBtn" style="margin-top:10px;">✎ Profilni tahrirlash</button>
-      ${u.authProvider==='google' ? `<button class="btn-small btn-plum" id="setPasswordBtn" style="margin-left:6px;">🔑 Parol o'rnatish</button>` : ''}
-    </div>
-    <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">${t('chiqish')}</button>
-    `;
-  }
   return '';
 }
 
@@ -1568,7 +1439,10 @@ function renderParentHome(){
       <div class="child-item">
         <div class="child-row" style="margin-bottom:6px;">
           <div class="avatar">${initials(c.acc.ism)}</div>
-          <div class="item-title">${escapeHtml(c.acc.ism)}</div>
+          <div>
+            <div class="item-title">${escapeHtml(c.acc.ism)}</div>
+            <div class="item-meta">${escapeHtml(c.acc.muassasaNomi||'')}${c.acc.sinf?' · '+escapeHtml(c.acc.sinf):''}</div>
+          </div>
         </div>
         ${lessons.length ? `<div class="item-meta">Bugun ${lessons.length} ta dars: ${lessons.map(l=>l.boshlanish+' '+l.fan).join(', ')}</div>` : `<div class="item-meta">Bugun dars kiritilmagan.</div>`}
         <button class="btn-small" data-pdf-report="${escapeHtml(c.email)}" style="margin-top:8px;">⬇ ${t('pdf_hisobot')}</button>
@@ -1609,7 +1483,8 @@ function renderParentChildren(){
         <div class="avatar">${initials(c.acc.ism)}</div>
         <div style="flex:1;">
           <div class="item-title">${escapeHtml(c.acc.ism)}</div>
-          <div class="item-meta">${MUASSASA_LABEL[c.acc.muassasa]||''} ${c.acc.sinf?'· '+escapeHtml(c.acc.sinf):''}</div>
+          <div class="item-meta">${MUASSASA_LABEL[c.acc.muassasa]||''}${c.acc.muassasaNomi?' · '+escapeHtml(c.acc.muassasaNomi):''}${c.acc.sinf?' · '+escapeHtml(c.acc.sinf):''}</div>
+          ${(c.acc.viloyat || c.acc.tuman) ? `<div class="item-meta">${escapeHtml(c.acc.viloyat||'')}${c.acc.tuman?', '+escapeHtml(c.acc.tuman):''}</div>` : ''}
         </div>
         <button class="btn-small" data-chat-child="${escapeHtml(c.email)}|${escapeHtml(c.acc.ism)}">${svgIcon('chat')}${unread?` <span class="badge unread">${unread}</span>`:''}</button>
       </div>
@@ -1644,29 +1519,6 @@ function renderParentChildren(){
       </div>
     </div>`;
   }).join('');
-}
-
-function renderAdminAnnouncements(){
-  const list = state.adminData.announcements || [];
-  const q = (state.annFilter||'').trim().toLowerCase();
-  const filtered = q ? list.filter(a=>(a.matn||'').toLowerCase().includes(q)) : list;
-  return `
-  <div class="sheet sheet-plum">
-    <div class="eyebrow">${escapeHtml(state.user.muassasaNomi)} — e'lonlar</div>
-    ${list.length > 3 ? `<input type="text" id="annSearchInput" placeholder="${t('qidirish_elon')}" value="${escapeHtml(state.annFilter||'')}" style="margin-bottom:10px;">` : ''}
-    ${filtered.length ? filtered.map(a=>`
-      <div class="plan-item">
-        ${a.rasmUrl?`<img src="${a.rasmUrl}" style="width:100%;border-radius:8px;margin-bottom:8px;">`:''}
-        <div class="item-top">
-          <div><div class="item-title">${escapeHtml(a.matn)}</div><div class="item-meta">${fmtDate(a.sana)}</div></div>
-          <div style="display:flex;gap:4px;">
-            <button class="del" data-edit-announcement="${a.id}" title="Tahrirlash">✎</button>
-            <button class="del" data-del-announcement="${a.id}">✕</button>
-          </div>
-        </div>
-      </div>
-    `).join('') : `<div class="empty">${svgIcon('speaker')}<div>${q ? "Hech narsa topilmadi." : "Hali e'lon joylanmagan. Pastdagi + tugmasi orqali qo'shing."}</div></div>`}
-  </div>`;
 }
 
 function renderModal(){
@@ -1799,7 +1651,7 @@ function renderModal(){
       <form id="editProfileForm">
         <label>${t('lbl_ism_familiya')}</label>
         <input type="text" name="ism" value="${escapeHtml(u.ism)}" required>
-        ${(u.role==='talaba'||u.role==='admin') ? `
+        ${u.role==='talaba' ? `
         <label>${t('lbl_viloyat')}</label>
         <select name="viloyat" class="viloyat-select" required>
           ${viloyatOptionsHtml(u.viloyat||'')}
@@ -1809,16 +1661,14 @@ function renderModal(){
           <option value="">— Tanlang —</option>
           ${(HUDUDLAR[u.viloyat]||[]).map(t=>`<option value="${t}" ${u.tuman===t?'selected':''}>${t}</option>`).join('')}
         </select>
-        <label>${u.role==='talaba'?t('lbl_muassasa_turi_talaba'):t('lbl_muassasa_turi')}</label>
+        <label>${t('lbl_muassasa_turi_talaba')}</label>
         <select name="muassasa" class="muassasa-turi-select" required>
           ${opt('maktab','Maktab')}${opt('litsey','Akademik litsey')}${opt('kasb-hunar','Kasb-hunar maktabi')}${opt('universitet','Universitet / institut')}
         </select>
         <label>${t('lbl_muassasa_raqami')}</label>
         <input type="text" name="muassasaNomi" class="muassasa-nomi-input" value="${escapeHtml(u.muassasaNomi||'')}" required>
-        ${u.role==='talaba' ? `
         <label>${t('lbl_sinf')}</label>
         <input type="text" name="sinf" value="${escapeHtml(u.sinf||'')}" required>
-        ` : ''}
         ` : ''}
         <div id="modal-err" class="err"></div>
         <button class="btn-primary" type="submit">${t('saqlash')}</button>
@@ -1908,26 +1758,6 @@ function renderModal(){
     </div>
   </div>`;
   }
-  if(k==='announcement'){
-    const editing = !!state.modal.editId;
-    const a = editing ? state.adminData.announcements.find(x=>x.id===state.modal.editId) : null;
-    return `
-  <div class="modal-wrap" id="modalWrap">
-    <div class="modal">
-      <div class="modal-head"><h3>${editing?"E'lonni tahrirlash":"E'lon joylash"}</h3><button class="close-x" id="modalClose">✕</button></div>
-      <form id="announcementForm">
-        <label>${t('lbl_matn')}</label>
-        <textarea name="matn" rows="4" placeholder="Barcha o'quvchilarga xabar..." required>${a?escapeHtml(a.matn):''}</textarea>
-        <label>${t('lbl_rasm')}</label>
-        <input type="file" name="rasm" accept="image/*">
-        ${a && a.rasmUrl ? `<img src="${a.rasmUrl}" style="width:100%;border-radius:8px;margin-top:8px;">` : ''}
-        <div id="upload-progress" class="item-meta" style="margin-top:6px;"></div>
-        <div id="modal-err" class="err"></div>
-        <button class="btn-primary" type="submit">${editing?'Yangilash':'Joylash'}</button>
-      </form>
-    </div>
-  </div>`;
-  }
   if(k==='chat'){
     const thread = state.modal.thread || [];
     return `
@@ -1970,8 +1800,6 @@ function attachAppHandlers(){
     if(state.user.role==='talaba'){
       const map = { jadval:'lesson', rejalar:'plan', eslatma:'reminder' };
       openModal(map[state.tab] || 'reminder');
-    } else if(state.user.role==='admin'){
-      openModal('announcement');
     } else if(state.user.role==='ota_ona'){
       openModal('addChild');
     }
@@ -2017,7 +1845,6 @@ function attachAppHandlers(){
   document.querySelectorAll('[data-del-homework]').forEach(b=> b.addEventListener('click', ()=> delHomework(b.dataset.delHomework)));
   document.querySelectorAll('[data-toggle-hw]').forEach(b=> b.addEventListener('change', ()=> toggleHomework(b.dataset.toggleHw)));
   document.querySelectorAll('[data-export]').forEach(b=> b.addEventListener('click', ()=> exportCSV(b.dataset.export)));
-  document.querySelectorAll('[data-del-announcement]').forEach(b=> b.addEventListener('click', ()=> delAnnouncement(b.dataset.delAnnouncement)));
   document.querySelectorAll('[data-edit-lesson]').forEach(b=> b.addEventListener('click', ()=> openModal('lesson', { editId: b.dataset.editLesson })));
   document.querySelectorAll('[data-schedule-view]').forEach(b=> b.addEventListener('click', ()=>{ state.scheduleView = b.dataset.scheduleView; render(); }));
   const hwSearch = document.getElementById('hwSearchInput');
@@ -2048,7 +1875,6 @@ function attachAppHandlers(){
   if(ofb) ofb.addEventListener('click', finishOnboarding);
   document.querySelectorAll('[data-edit-plan]').forEach(b=> b.addEventListener('click', ()=> openModal('plan', { editId: b.dataset.editPlan })));
   document.querySelectorAll('[data-edit-reminder]').forEach(b=> b.addEventListener('click', ()=> openModal('reminder', { editId: b.dataset.editReminder })));
-  document.querySelectorAll('[data-edit-announcement]').forEach(b=> b.addEventListener('click', ()=> openModal('announcement', { editId: b.dataset.editAnnouncement })));
   document.querySelectorAll('[data-accept-req]').forEach(b=> b.addEventListener('click', ()=> respondLinkRequest(b.dataset.acceptReq, true)));
   document.querySelectorAll('[data-decline-req]').forEach(b=> b.addEventListener('click', ()=> respondLinkRequest(b.dataset.declineReq, false)));
   document.querySelectorAll('[data-chat-parent]').forEach(b=> b.addEventListener('click', ()=> openChat(b.dataset.chatParent, b.dataset.chatParent, 'child')));
@@ -2118,23 +1944,13 @@ function attachAppHandlers(){
   if(ppf) ppf.addEventListener('submit', parentAddPlan);
   const prf = document.getElementById('parentReminderForm');
   if(prf) prf.addEventListener('submit', parentAddReminder);
-  const anf = document.getElementById('announcementForm');
-  if(anf) anf.addEventListener('submit', postAnnouncement);
   const cf = document.getElementById('chatForm');
   if(cf) cf.addEventListener('submit', sendChat);
   const cl = document.querySelector('.chat-list');
   if(cl) cl.scrollTop = cl.scrollHeight;
 }
 
-async function loadStudentAnnouncements(){
-  if(state.user && state.user.role==='talaba' && state.user.muassasaNomi){
-    const key = institutionKey(state.user);
-    state.data._announcements = await annList(key);
-    render();
-  }
-}
-
-boot().then(()=>{ if(state.user && state.user.role==='talaba') loadStudentAnnouncements(); });
+boot();
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
