@@ -8,7 +8,7 @@ let state = {
   lang: 'uz',
   user: null,
   tab: 'bosh',
-  data: { schedule: [], plans: [], reminders: [], grades: [], homework: [] },
+  data: { schedule: [], plans: [], reminders: [] },
   parentData: { children: [], requests: [], unreadByEmail: {} },
   toast: null,
   modal: null,
@@ -63,18 +63,14 @@ async function loginAs(acc){
     // ekanini qayta ta'minlaymiz — zararsiz va tez, ota-onalar endi bunday
     // eski hisoblarni ham topa oladi.
     studentDirAdd(sanitizeKey(acc.email)).catch(()=>{});
-    const [sc, pl, rm, gr, hw] = await Promise.all([
+    const [sc, pl, rm] = await Promise.all([
       sGet('schedule:'+sanitizeKey(acc.email)),
       sGet('plans:'+sanitizeKey(acc.email)),
-      sGet('reminders:'+sanitizeKey(acc.email)),
-      sGet('grades:'+sanitizeKey(acc.email)),
-      sGet('homework:'+sanitizeKey(acc.email))
+      sGet('reminders:'+sanitizeKey(acc.email))
     ]);
     state.data.schedule = sc || [];
     state.data.plans = pl || [];
     state.data.reminders = rm || [];
-    state.data.grades = gr || [];
-    state.data.homework = hw || [];
     const allReqs = await lrListForStudent(sanitizeKey(acc.email));
     state.parentData.requests = allReqs.filter(r=>r.status==='pending');
     state.parentData.linkedParents = allReqs.filter(r=>r.status==='accepted').map(r=>r.parentEmail);
@@ -121,14 +117,12 @@ async function loadParentChildren(){
   const results = await Promise.all(childEmails.map(async (em)=>{
     const acc = await sGet('account:'+sanitizeKey(em));
     if(!acc) return null;
-    const [sc, pl, rm, gr, hw] = await Promise.all([
+    const [sc, pl, rm] = await Promise.all([
       sGet('schedule:'+sanitizeKey(em)),
       sGet('plans:'+sanitizeKey(em)),
-      sGet('reminders:'+sanitizeKey(em)),
-      sGet('grades:'+sanitizeKey(em)),
-      sGet('homework:'+sanitizeKey(em))
+      sGet('reminders:'+sanitizeKey(em))
     ]);
-    return { email: em, acc, schedule: sc||[], plans: pl||[], reminders: rm||[], grades: gr||[], homework: hw||[] };
+    return { email: em, acc, schedule: sc||[], plans: pl||[], reminders: rm||[] };
   }));
   state.parentData.children = results.filter(Boolean);
 }
@@ -138,9 +132,7 @@ async function saveAll(){
   const results = await Promise.all([
     sSet('schedule:'+e, state.data.schedule),
     sSet('plans:'+e, state.data.plans),
-    sSet('reminders:'+e, state.data.reminders),
-    sSet('grades:'+e, state.data.grades),
-    sSet('homework:'+e, state.data.homework)
+    sSet('reminders:'+e, state.data.reminders)
   ]);
   // sSet xatolikda "null" qaytaradi (chetga chiqarmaydi) — shuning uchun
   // avval bu yerda muvaffaqiyatsizlik butunlay sezilmasdan qolardi va
@@ -183,20 +175,6 @@ function checkEngine(){
       }
     }
   });
-
-  const hwKey = 'hw_daily_'+today;
-  if(hm >= '07:00' && !state.firedKeys.has(hwKey)){
-    const dueOrOverdue = (state.data.homework||[]).filter(h=> !h.bajarildi && h.muddat <= today);
-    if(dueOrOverdue.length){
-      state.firedKeys.add(hwKey);
-      const todays = dueOrOverdue.filter(h=>h.muddat===today).length;
-      const overdue = dueOrOverdue.length - todays;
-      const parts = [];
-      if(todays) parts.push(todays+" ta bugun");
-      if(overdue) parts.push(overdue+" ta kechikkan");
-      fireNotif('Uy vazifasi', parts.join(', ')+' vazifa bor.');
-    }
-  }
 
   if(mode === 'har_dars'){
     const di = dowIndex(today);
@@ -490,59 +468,6 @@ async function delReminder(id){
   await saveAll(); render();
 }
 
-async function addGrade(e){
-  e.preventDefault();
-  const f = e.target;
-  const fan = f.fan.value.trim();
-  const baho = f.baho.value;
-  const sana = f.sana.value;
-  const izoh = f.izoh.value.trim();
-  const editId = state.modal.editId;
-  if(!fan || !baho || !sana){ document.getElementById('modal-err').textContent = t('err_fan_baho_sana'); return; }
-  if(editId){
-    const g = state.data.grades.find(x=>x.id===editId);
-    if(g) Object.assign(g, { fan, baho, sana, izoh });
-  } else {
-    state.data.grades.push({ id: uid(), fan, baho, sana, izoh });
-  }
-  state.data.grades.sort((a,b)=> b.sana.localeCompare(a.sana));
-  await saveAll();
-  closeModal();
-  showToast(editId ? "Baho yangilandi." : "Baho qo'shildi.");
-}
-async function delGrade(id){
-  state.data.grades = state.data.grades.filter(g=>g.id!==id);
-  await saveAll(); render();
-}
-
-async function addHomework(e){
-  e.preventDefault();
-  const f = e.target;
-  const fan = f.fan.value.trim();
-  const matn = f.matn.value.trim();
-  const muddat = f.muddat.value;
-  const editId = state.modal.editId;
-  if(!fan || !matn || !muddat){ document.getElementById('modal-err').textContent = t('err_fan_vazifa_muddat'); return; }
-  if(editId){
-    const hw = state.data.homework.find(x=>x.id===editId);
-    if(hw) Object.assign(hw, { fan, matn, muddat });
-  } else {
-    state.data.homework.push({ id: uid(), fan, matn, muddat, bajarildi: false });
-  }
-  state.data.homework.sort((a,b)=> a.muddat.localeCompare(b.muddat));
-  await saveAll();
-  closeModal();
-  showToast(editId ? "Uy vazifasi yangilandi." : "Uy vazifasi qo'shildi.");
-}
-async function toggleHomework(id){
-  const hw = state.data.homework.find(x=>x.id===id);
-  if(hw){ hw.bajarildi = !hw.bajarildi; await saveAll(); render(); }
-}
-async function delHomework(id){
-  state.data.homework = state.data.homework.filter(h=>h.id!==id);
-  await saveAll(); render();
-}
-
 function downloadCSV(filename, rows){
   const csv = rows.map(r=> r.map(cell=>{
     const s = String(cell==null?'':cell).replace(/"/g,'""');
@@ -569,10 +494,6 @@ function exportCSV(kind){
     const rows = [['Matn','Sana','Vaqt','Takrorlanish']];
     state.data.reminders.forEach(r=> rows.push([r.matn, r.sana, r.vaqt, r.takrorlanish]));
     downloadCSV('eslatmalar.csv', rows);
-  } else if(kind==='baholar'){
-    const rows = [['Fan','Baho','Sana','Izoh']];
-    state.data.grades.forEach(g=> rows.push([g.fan, g.baho, g.sana, g.izoh||'']));
-    downloadCSV('baholar.csv', rows);
   }
   showToast("Fayl yuklab olindi.");
 }
@@ -598,32 +519,30 @@ function exportChildPDF(childEmail){
   doc.setFontSize(13);
   doc.text("So'nggi 7 kunlik xulosa", 14, y); y += 7;
   doc.setFontSize(10.5);
-  doc.text(`O'rtacha baho: ${r.avgGrade ?? '—'}  (${r.gradeCount} ta baho)`, 14, y); y += 6;
-  doc.text(`Uy vazifasi: ${r.doneHw}/${r.totalHw} bajarilgan, ${r.overdueHw} ta kechikkan`, 14, y); y += 6;
+  doc.text(`Yaqin rejalar: ${r.upcomingPlans}`, 14, y); y += 6;
   doc.text(`Yaqin eslatmalar: ${r.upcomingReminders}`, 14, y); y += 10;
 
   doc.setFontSize(13);
-  doc.text('Baholar', 14, y); y += 7;
+  doc.text('Rejalar', 14, y); y += 7;
   doc.setFontSize(10);
-  if((child.grades||[]).length){
-    child.grades.slice().sort((a,b)=>b.sana.localeCompare(a.sana)).forEach(g=>{
+  if((child.plans||[]).length){
+    child.plans.slice().sort((a,b)=>a.sana.localeCompare(b.sana)).forEach(p=>{
       if(y > 275){ doc.addPage(); y = 18; }
-      doc.text(`${fmtDate(g.sana)} — ${g.fan}: ${g.baho}${g.izoh?' ('+g.izoh+')':''}`, 14, y); y += 6;
+      doc.text(`${fmtDate(p.sana)} — ${p.nom}${p.izoh?' ('+p.izoh+')':''}`, 14, y); y += 6;
     });
-  } else { doc.text('Hali baho kiritilmagan.', 14, y); y += 6; }
+  } else { doc.text('Hali reja kiritilmagan.', 14, y); y += 6; }
   y += 6;
 
   if(y > 260){ doc.addPage(); y = 18; }
   doc.setFontSize(13);
-  doc.text('Uy vazifalari', 14, y); y += 7;
+  doc.text('Eslatmalar', 14, y); y += 7;
   doc.setFontSize(10);
-  if((child.homework||[]).length){
-    child.homework.slice().sort((a,b)=>a.muddat.localeCompare(b.muddat)).forEach(h=>{
+  if((child.reminders||[]).length){
+    child.reminders.slice().sort((a,b)=>(a.sana+a.vaqt).localeCompare(b.sana+b.vaqt)).forEach(rm=>{
       if(y > 275){ doc.addPage(); y = 18; }
-      const holat = h.bajarildi ? 'bajarilgan' : (h.muddat < todayISO() ? 'KECHIKKAN' : 'bajarilmagan');
-      doc.text(`${fmtDate(h.muddat)} — ${h.fan}: ${h.matn} [${holat}]`, 14, y); y += 6;
+      doc.text(`${fmtDate(rm.sana)} ${rm.vaqt||''} — ${rm.matn}`, 14, y); y += 6;
     });
-  } else { doc.text('Hali uy vazifasi kiritilmagan.', 14, y); y += 6; }
+  } else { doc.text('Hali eslatma kiritilmagan.', 14, y); y += 6; }
 
   doc.save(`${(child.acc.ism||'oquvchi').replace(/\s+/g,'_')}-hisobot.pdf`);
   showToast('PDF hisobot yuklab olindi.');
@@ -1075,7 +994,6 @@ function renderTabs(){
       <button class="tab ${state.tab==='jadval'?'active':''}" data-tab="jadval">${svgIcon('cal')}<span>${t('tab_jadval')}</span></button>
       <button class="tab ${state.tab==='rejalar'?'active':''}" data-tab="rejalar">${svgIcon('plan')}<span>${t('tab_rejalar')}</span></button>
       <button class="tab ${state.tab==='eslatma'?'active':''}" data-tab="eslatma">${svgIcon('bell')}<span>${t('tab_eslatma')}</span></button>
-      <button class="tab ${state.tab==='baholar'?'active':''}" data-tab="baholar">${svgIcon('grade')}<span>${t('tab_baholar')}</span></button>
       <button class="tab ${state.tab==='profil'?'active':''}" data-tab="profil">${hasDot?'<span class="dot"></span>':''}${svgIcon('user')}<span>${t('tab_profil')}</span></button>
     </div>`;
   }
@@ -1098,7 +1016,6 @@ function renderTabContent(){
     if(state.tab==='jadval') return renderSchedule();
     if(state.tab==='rejalar') return renderPlans();
     if(state.tab==='eslatma') return renderReminders();
-    if(state.tab==='baholar') return renderGrades();
     if(state.tab==='profil') return renderProfile();
   }
   if(r==='ota_ona'){
@@ -1241,100 +1158,6 @@ function renderReminders(){
   </div>`;
 }
 
-let _gradesChartInstance = null;
-function initGradesChart(){
-  const canvas = document.getElementById('gradesChart');
-  if(!canvas || typeof Chart === 'undefined') return;
-  if(_gradesChartInstance){ _gradesChartInstance.destroy(); _gradesChartInstance = null; }
-  const numericGrades = (state.data.grades||[]).filter(g=> !isNaN(parseFloat(g.baho))).slice().sort((a,b)=>a.sana.localeCompare(b.sana));
-  if(numericGrades.length < 2) return;
-  const rootStyles = getComputedStyle(document.body);
-  const accent = rootStyles.getPropertyValue('--accent').trim() || '#E7A63D';
-  const ink = rootStyles.getPropertyValue('--ink').trim() || '#16233B';
-  const line = rootStyles.getPropertyValue('--line').trim() || '#C7D3E0';
-  _gradesChartInstance = new Chart(canvas.getContext('2d'), {
-    type: 'line',
-    data: {
-      labels: numericGrades.map(g=>fmtDate(g.sana)),
-      datasets: [{
-        label: 'Baho',
-        data: numericGrades.map(g=>parseFloat(g.baho)),
-        borderColor: accent,
-        backgroundColor: accent,
-        tension: 0.3,
-        pointRadius: 4,
-        pointHoverRadius: 6
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { color: ink, font: { size: 10.5 } }, grid: { color: line } },
-        y: { ticks: { color: ink, font: { size: 10.5 } }, grid: { color: line } }
-      }
-    }
-  });
-}
-
-function renderGrades(){
-  const grades = state.data.grades || [];
-  const homework = state.data.homework || [];
-  const today = todayISO();
-  const numericGrades = grades.filter(g=> !isNaN(parseFloat(g.baho))).slice().sort((a,b)=>a.sana.localeCompare(b.sana));
-  return `
-  ${numericGrades.length >= 2 ? `
-  <div class="sheet">
-    <div class="eyebrow">Baholar dinamikasi</div>
-    <canvas id="gradesChart" height="160"></canvas>
-  </div>` : ''}
-  <div class="sheet">
-    <div class="item-top" style="margin-bottom:2px;"><div class="eyebrow" style="margin-bottom:0;">Baholar</div><button class="btn-small" data-export="baholar">⬇ CSV</button></div>
-    ${grades.length ? grades.map(g=>`
-      <div class="plan-item">
-        <div class="item-top">
-          <div><div class="item-title">${escapeHtml(g.fan)}</div><div class="item-meta">${fmtDate(g.sana)} ${g.izoh?'· '+escapeHtml(g.izoh):''}</div></div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span class="badge rep">${escapeHtml(g.baho)}</span>
-            <button class="del" data-edit-grade="${g.id}" title="Tahrirlash">✎</button>
-            <button class="del" data-del-grade="${g.id}">✕</button>
-          </div>
-        </div>
-      </div>
-    `).join('') : `<div class="empty">${svgIcon('grade')}<div>Hali baho kiritilmagan.</div></div>`}
-    <button class="btn-small btn-accent" id="addGradeBtn" style="margin-top:10px;">+ Baho qo'shish</button>
-  </div>
-  <div class="sheet sheet-plum">
-    <div class="item-top" style="margin-bottom:8px;">
-      <div class="eyebrow" style="margin-bottom:0;">Uy vazifalari</div>
-    </div>
-    <input type="text" id="hwSearchInput" placeholder="${t('qidirish_uy_vazifa')}" value="${escapeHtml(state.hwFilter||'')}" style="margin-bottom:10px;">
-    ${(()=>{
-      const q = (state.hwFilter||'').trim().toLowerCase();
-      const filtered = q ? homework.filter(h=> (h.fan||'').toLowerCase().includes(q) || (h.matn||'').toLowerCase().includes(q)) : homework;
-      return filtered.length ? filtered.map(h=>`
-      <div class="plan-item">
-        <div class="item-top">
-          <div style="display:flex;gap:10px;align-items:flex-start;">
-            <input type="checkbox" data-toggle-hw="${h.id}" ${h.bajarildi?'checked':''} style="margin-top:4px;width:16px;height:16px;">
-            <div>
-              <div class="item-title" style="${h.bajarildi?'text-decoration:line-through;opacity:0.6;':''}">${escapeHtml(h.fan)} — ${escapeHtml(h.matn)}</div>
-              <div class="item-meta">Muddat: ${fmtDate(h.muddat)} ${(!h.bajarildi && h.muddat < today) ? '· <span style="color:var(--alert);font-weight:700;">kechikkan</span>' : ''}</div>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <button class="del" data-edit-homework="${h.id}" title="Tahrirlash">✎</button>
-            <button class="del" data-del-homework="${h.id}">✕</button>
-          </div>
-        </div>
-      </div>
-    `).join('') : `<div class="empty">${svgIcon('plan')}<div>${q ? t('hech_narsa_topilmadi') : "Hali uy vazifasi kiritilmagan."}</div></div>`;
-    })()}
-    <button class="btn-small btn-plum" id="addHomeworkBtn" style="margin-top:10px;">+ Uy vazifasi qo'shish</button>
-  </div>
-  `;
-}
-
 function renderProfile(){
   const u = state.user;
   if(u.role==='talaba'){
@@ -1412,18 +1235,10 @@ function renderProfile(){
 }
 
 function computeWeeklyReport(child){
-  const now = new Date();
-  const weekAgo = new Date(now); weekAgo.setDate(now.getDate()-7);
-  const weekAgoStr = weekAgo.toISOString().slice(0,10);
   const today = todayISO();
-  const weekGrades = (child.grades||[]).filter(g=> g.sana >= weekAgoStr && g.sana <= today);
-  const numericWeek = weekGrades.filter(g=> !isNaN(parseFloat(g.baho))).map(g=>parseFloat(g.baho));
-  const avgGrade = numericWeek.length ? (numericWeek.reduce((a,b)=>a+b,0)/numericWeek.length).toFixed(1) : null;
-  const weekHw = (child.homework||[]).filter(h=> h.muddat >= weekAgoStr && h.muddat <= today);
-  const doneHw = weekHw.filter(h=>h.bajarildi).length;
-  const overdueHw = (child.homework||[]).filter(h=> !h.bajarildi && h.muddat < today).length;
+  const upcomingPlans = (child.plans||[]).filter(p=> p.sana >= today).length;
   const upcomingReminders = (child.reminders||[]).filter(r=> r.sana >= today).length;
-  return { avgGrade, gradeCount: weekGrades.length, doneHw, totalHw: weekHw.length, overdueHw, upcomingReminders };
+  return { upcomingPlans, upcomingReminders };
 }
 
 function renderParentHome(){
@@ -1451,16 +1266,14 @@ function renderParentHome(){
   </div>
   ${children.length ? `
   <div class="sheet">
-    <div class="eyebrow">Haftalik hisobot (so'nggi 7 kun)</div>
+    <div class="eyebrow">Yaqinlashib kelayotgan</div>
     ${children.map(c=>{
       const r = computeWeeklyReport(c);
       return `
       <div class="plan-item">
         <div class="item-title" style="margin-bottom:6px;">${escapeHtml(c.acc.ism)}</div>
         <div style="display:flex;gap:14px;flex-wrap:wrap;">
-          <div><div style="font-family:'Fraunces',serif;font-size:18px;font-weight:600;">${r.avgGrade ?? '—'}</div><div class="item-meta">O'rtacha baho (${r.gradeCount})</div></div>
-          <div><div style="font-family:'Fraunces',serif;font-size:18px;font-weight:600;">${r.doneHw}/${r.totalHw}</div><div class="item-meta">Uy vazifasi bajarildi</div></div>
-          <div><div style="font-family:'Fraunces',serif;font-size:18px;font-weight:600;color:${r.overdueHw?'var(--alert)':'inherit'};">${r.overdueHw}</div><div class="item-meta">Kechikkan vazifa</div></div>
+          <div><div style="font-family:'Fraunces',serif;font-size:18px;font-weight:600;">${r.upcomingPlans}</div><div class="item-meta">Yaqin reja</div></div>
           <div><div style="font-family:'Fraunces',serif;font-size:18px;font-weight:600;">${r.upcomingReminders}</div><div class="item-meta">Yaqin eslatma</div></div>
         </div>
       </div>`;
@@ -1593,48 +1406,6 @@ function renderModal(){
         <select name="takrorlanish">
           ${opt('bir_marta','Bir marta')}${opt('kunlik','Har kuni')}${opt('haftalik','Har hafta')}${opt('oylik','Har oy')}${opt('yillik','Har yili')}
         </select>
-        <div id="modal-err" class="err"></div>
-        <button class="btn-primary" type="submit">${editing?t('yangilash'):t('saqlash')}</button>
-      </form>
-    </div>
-  </div>`;
-  }
-  if(k==='grade'){
-    const editing = !!state.modal.editId;
-    const g = editing ? state.data.grades.find(x=>x.id===state.modal.editId) : null;
-    return `
-  <div class="modal-wrap" id="modalWrap">
-    <div class="modal">
-      <div class="modal-head"><h3>${editing?"Bahoni tahrirlash":"Baho qo'shish"}</h3><button class="close-x" id="modalClose">✕</button></div>
-      <form id="gradeForm">
-        <label>${t('lbl_fan')}</label>
-        <input type="text" name="fan" placeholder="Masalan: Matematika" value="${g?escapeHtml(g.fan):''}" required>
-        <label>${t('lbl_baho')}</label>
-        <input type="text" name="baho" placeholder="Masalan: 5 yoki 92%" value="${g?escapeHtml(g.baho):''}" required>
-        <label>${t('lbl_sana')}</label>
-        <input type="date" name="sana" value="${g?g.sana:todayISO()}" required>
-        <label>${t('lbl_izoh')}</label>
-        <input type="text" name="izoh" placeholder="Masalan: nazorat ishi" value="${g&&g.izoh?escapeHtml(g.izoh):''}">
-        <div id="modal-err" class="err"></div>
-        <button class="btn-primary" type="submit">${editing?t('yangilash'):t('saqlash')}</button>
-      </form>
-    </div>
-  </div>`;
-  }
-  if(k==='homework'){
-    const editing = !!state.modal.editId;
-    const h = editing ? state.data.homework.find(x=>x.id===state.modal.editId) : null;
-    return `
-  <div class="modal-wrap" id="modalWrap">
-    <div class="modal">
-      <div class="modal-head"><h3>${editing?"Uy vazifasini tahrirlash":"Uy vazifasi qo'shish"}</h3><button class="close-x" id="modalClose">✕</button></div>
-      <form id="homeworkForm">
-        <label>${t('lbl_fan')}</label>
-        <input type="text" name="fan" placeholder="Masalan: Ona tili" value="${h?escapeHtml(h.fan):''}" required>
-        <label>${t('lbl_vazifa')}</label>
-        <input type="text" name="matn" placeholder="Masalan: 45-mashq" value="${h?escapeHtml(h.matn):''}" required>
-        <label>${t('lbl_muddat')}</label>
-        <input type="date" name="muddat" value="${h?h.muddat:''}" required>
         <div id="modal-err" class="err"></div>
         <button class="btn-primary" type="submit">${editing?t('yangilash'):t('saqlash')}</button>
       </form>
@@ -1835,28 +1606,9 @@ function attachAppHandlers(){
   document.querySelectorAll('[data-del-lesson]').forEach(b=> b.addEventListener('click', ()=> delLesson(b.dataset.delLesson)));
   document.querySelectorAll('[data-del-plan]').forEach(b=> b.addEventListener('click', ()=> delPlan(b.dataset.delPlan)));
   document.querySelectorAll('[data-del-reminder]').forEach(b=> b.addEventListener('click', ()=> delReminder(b.dataset.delReminder)));
-  const agb = document.getElementById('addGradeBtn');
-  if(agb) agb.addEventListener('click', ()=> openModal('grade'));
-  const ahb = document.getElementById('addHomeworkBtn');
-  if(ahb) ahb.addEventListener('click', ()=> openModal('homework'));
-  document.querySelectorAll('[data-edit-grade]').forEach(b=> b.addEventListener('click', ()=> openModal('grade', { editId: b.dataset.editGrade })));
-  document.querySelectorAll('[data-del-grade]').forEach(b=> b.addEventListener('click', ()=> delGrade(b.dataset.delGrade)));
-  document.querySelectorAll('[data-edit-homework]').forEach(b=> b.addEventListener('click', ()=> openModal('homework', { editId: b.dataset.editHomework })));
-  document.querySelectorAll('[data-del-homework]').forEach(b=> b.addEventListener('click', ()=> delHomework(b.dataset.delHomework)));
-  document.querySelectorAll('[data-toggle-hw]').forEach(b=> b.addEventListener('change', ()=> toggleHomework(b.dataset.toggleHw)));
   document.querySelectorAll('[data-export]').forEach(b=> b.addEventListener('click', ()=> exportCSV(b.dataset.export)));
   document.querySelectorAll('[data-edit-lesson]').forEach(b=> b.addEventListener('click', ()=> openModal('lesson', { editId: b.dataset.editLesson })));
   document.querySelectorAll('[data-schedule-view]').forEach(b=> b.addEventListener('click', ()=>{ state.scheduleView = b.dataset.scheduleView; render(); }));
-  const hwSearch = document.getElementById('hwSearchInput');
-  if(hwSearch){
-    hwSearch.addEventListener('input', ()=>{
-      state.hwFilter = hwSearch.value;
-      const pos = hwSearch.selectionStart;
-      render();
-      const again = document.getElementById('hwSearchInput');
-      if(again){ again.focus(); again.setSelectionRange(pos, pos); }
-    });
-  }
   const annSearch = document.getElementById('annSearchInput');
   if(annSearch){
     annSearch.addEventListener('input', ()=>{
@@ -1914,15 +1666,10 @@ function attachAppHandlers(){
   if(pf) pf.addEventListener('submit', addPlan);
   const rf = document.getElementById('reminderForm');
   if(rf) rf.addEventListener('submit', addReminder);
-  const gf = document.getElementById('gradeForm');
-  if(gf) gf.addEventListener('submit', addGrade);
-  const hwf = document.getElementById('homeworkForm');
-  if(hwf) hwf.addEventListener('submit', addHomework);
   const epf = document.getElementById('editProfileForm');
   if(epf) epf.addEventListener('submit', handleEditProfileSubmit);
   const spf = document.getElementById('setPasswordForm');
   if(spf) spf.addEventListener('submit', handleSetPasswordSubmit);
-  initGradesChart();
   document.querySelectorAll('.viloyat-select').forEach(sel=>{
     sel.addEventListener('change', ()=>{
       const tumanSel = sel.closest('form').querySelector('.tuman-select');
