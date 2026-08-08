@@ -57,7 +57,8 @@
   .theme-toggle:active{transform:scale(0.92);}
   .theme-toggle svg{width:17px;height:17px;color:var(--accent-deep);}
 
-  .sheet{background:var(--paper-card);margin:0 16px 16px;border-radius:12px;border:1px solid var(--line);border-left:3px solid var(--margin-red);padding:18px 18px 18px 22px;position:relative;overflow:hidden;box-shadow:var(--shadow-sm);transition:background-color .25s ease,border-color .25s ease;}
+  @keyframes rejaFadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+  .sheet{background:var(--paper-card);margin:0 16px 16px;border-radius:12px;border:1px solid var(--line);border-left:3px solid var(--margin-red);padding:18px 18px 18px 22px;position:relative;overflow:hidden;box-shadow:var(--shadow-sm);transition:background-color .25s ease,border-color .25s ease;animation:rejaFadeIn .22s ease both;}
   .sheet::before{content:'';position:absolute;left:0;top:0;bottom:0;width:1px;background:var(--margin-red);}
   .sheet-ruled{background-image:repeating-linear-gradient(var(--paper-card) 0px, var(--paper-card) 27px, var(--line) 28px);}
   .sheet-plum{border-left-color:var(--plum);}
@@ -70,6 +71,7 @@
   label{display:block;font-size:12.5px;color:var(--ink-soft);margin:14px 0 5px;font-weight:600;}
   input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--paper);font-family:'Manrope',sans-serif;font-size:14.5px;color:var(--ink);transition:background-color .2s,border-color .2s,color .2s;}
   input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 
   button{cursor:pointer;font-family:'Manrope',sans-serif;font-weight:600;font-size:14px;border-radius:8px;border:1px solid var(--line);background:var(--paper-card);color:var(--ink);padding:10px 16px;transition:background-color .2s,border-color .2s,color .2s,transform .1s;}
@@ -86,7 +88,8 @@
   .note{font-size:11.5px;color:var(--ink-soft);margin-top:16px;padding-top:12px;border-top:1px dashed var(--line);}
 
   .tabs{display:flex;position:fixed;bottom:0;left:0;right:0;max-width:480px;margin:0 auto;background:var(--paper-card);border-top:1px solid var(--line);padding:6px 4px 10px;z-index:5;box-shadow:0 -4px 16px rgba(0,0,0,0.05);transition:background-color .25s ease,border-color .25s ease;}
-  .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;border-radius:8px;color:var(--ink-soft);font-size:10.5px;font-weight:600;border:none;background:transparent;position:relative;transition:background-color .2s,color .2s;}
+  .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;border-radius:8px;color:var(--ink-soft);font-size:10.5px;font-weight:600;border:none;background:transparent;position:relative;transition:background-color .2s,color .2s,transform .12s;}
+  .tab:active{transform:scale(0.93);}
   .tab.active{color:var(--accent-deep);background:var(--accent-soft);}
   .tab svg{width:19px;height:19px;}
   .dot{position:absolute;top:4px;right:22%;width:7px;height:7px;border-radius:50%;background:var(--alert);box-shadow:0 0 0 2px var(--paper-card);}
@@ -104,7 +107,8 @@
   .lesson .del{background:none;border:none;color:var(--ink-soft);font-size:15px;padding:2px 5px;}
   .lesson .del:hover{color:var(--ink);}
 
-  .plan-item,.rem-item,.req-item,.child-item,.msg-item{padding:12px 0;border-bottom:1px solid var(--line);}
+  .plan-item,.rem-item,.req-item,.child-item,.msg-item{padding:12px 0;border-bottom:1px solid var(--line);border-radius:6px;transition:background-color .15s ease;}
+  .plan-item:hover,.rem-item:hover,.req-item:hover,.child-item:hover{background-color:var(--accent-soft);background-color:color-mix(in srgb, var(--accent-soft) 45%, transparent);}
   .plan-item:last-child,.rem-item:last-child,.req-item:last-child,.child-item:last-child,.msg-item:last-child{border-bottom:none;}
   .item-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
   .item-title{font-weight:600;font-size:14.5px;}
