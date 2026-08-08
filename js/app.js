@@ -127,21 +127,19 @@ async function loadParentChildren(){
   state.parentData.children = results.filter(Boolean);
 }
 
-async function saveAll(){
-  const e = sanitizeKey(state.user.email);
-  const results = await Promise.all([
-    sSet('schedule:'+e, state.data.schedule),
-    sSet('plans:'+e, state.data.plans),
-    sSet('reminders:'+e, state.data.reminders)
-  ]);
-  // sSet xatolikda "null" qaytaradi (chetga chiqarmaydi) — shuning uchun
-  // avval bu yerda muvaffaqiyatsizlik butunlay sezilmasdan qolardi va
-  // foydalanuvchi "saqlandi" deb o'ylab, aslida ma'lumot saqlanmagan
-  // bo'lishi mumkin edi. Endi kamida ogohlantiramiz.
-  if(results.some(r=> r === null)){
-    showToast("Saqlashda xatolik yuz berdi. Internetni tekshirib, qayta urinib ko'ring.");
-  }
+// ESLATMA: ilgari bu yerda bitta saveAll() bor edi, va u har safar — hatto
+// faqat BITTA dars/reja/eslatma o'zgarganda ham — barcha uchta
+// (schedule+plans+reminders) kolleksiyasini qayta yozardi. Bu ham sekinroq,
+// ham Firestore yozish kvotasini behuda sarflardi. Endi har biri o'z
+// kolleksiyasinigina saqlaydi.
+async function saveOne(key, value, errMsg){
+  const saved = await sSet(key, value);
+  if(!saved){ showToast(errMsg || "Saqlashda xatolik yuz berdi. Qayta urinib ko'ring."); }
+  return saved;
 }
+function saveSchedule(){ return saveOne('schedule:'+sanitizeKey(state.user.email), state.data.schedule); }
+function savePlans(){ return saveOne('plans:'+sanitizeKey(state.user.email), state.data.plans); }
+function saveReminders(){ return saveOne('reminders:'+sanitizeKey(state.user.email), state.data.reminders); }
 
 function showToast(msg){
   state.toast = msg;
@@ -170,7 +168,7 @@ function checkEngine(){
         fireNotif('Eslatma', r.matn);
         if(r.takrorlanish && r.takrorlanish !== 'bir_marta'){
           r.sana = addCycle(r.sana, r.takrorlanish);
-          saveAll();
+          saveReminders();
         }
       }
     }
@@ -199,8 +197,35 @@ function checkEngine(){
   }
 }
 
+// Eslatma tovushi — hech qanday tashqi audio-fayl kerak emas, Web Audio
+// API orqali brauzerning o'zida ikki ohangli yumshoq "ding" yaratamiz.
+// Foydalanuvchi buni Profil bo'limida yoqib/o'chirib qo'yishi mumkin.
+let _audioCtx = null;
+function playNotifSound(){
+  if(state.user && state.user.soundOff) return;
+  try{
+    if(!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(_audioCtx.state === 'suspended') _audioCtx.resume();
+    const now = _audioCtx.currentTime;
+    [880, 1318.5].forEach((freq, i)=>{
+      const osc = _audioCtx.createOscillator();
+      const gain = _audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const start = now + i*0.11;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.16, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.32);
+      osc.connect(gain).connect(_audioCtx.destination);
+      osc.start(start);
+      osc.stop(start + 0.34);
+    });
+  }catch(e){ /* Ovoz ixtiyoriy — xatolik bo'lsa jim o'tkazamiz */ }
+}
+
 function fireNotif(title, body){
   showToast(title+': '+body);
+  playNotifSound();
   try{
     if(window.Notification && Notification.permission === 'granted'){
       new Notification(title, { body });
@@ -406,14 +431,14 @@ async function addLesson(e){
     state.data.schedule.push({ id: uid(), fan, boshlanish, tugash, xona, kunlar });
   }
   state.data.schedule.sort((a,b)=> a.boshlanish.localeCompare(b.boshlanish));
-  await saveAll();
+  await saveSchedule();
   closeModal();
   showToast(editId ? "Dars yangilandi." : "Dars jadvalga qo'shildi.");
 }
 
 async function delLesson(id){
   state.data.schedule = state.data.schedule.filter(l=>l.id!==id);
-  await saveAll(); render();
+  await saveSchedule(); render();
 }
 
 async function addPlan(e){
@@ -432,14 +457,14 @@ async function addPlan(e){
     state.data.plans.push({ id: uid(), turi, nom, sana, izoh });
   }
   state.data.plans.sort((a,b)=> a.sana.localeCompare(b.sana));
-  await saveAll();
+  await savePlans();
   closeModal();
   showToast(editId ? "Reja yangilandi." : "Reja qo'shildi.");
 }
 
 async function delPlan(id){
   state.data.plans = state.data.plans.filter(p=>p.id!==id);
-  await saveAll(); render();
+  await savePlans(); render();
 }
 
 async function addReminder(e){
@@ -458,14 +483,14 @@ async function addReminder(e){
     state.data.reminders.push({ id: uid(), matn, sana, vaqt, takrorlanish });
   }
   state.data.reminders.sort((a,b)=> (a.sana+a.vaqt).localeCompare(b.sana+b.vaqt));
-  await saveAll();
+  await saveReminders();
   closeModal();
   showToast(editId ? "Eslatma yangilandi." : "Eslatma qo'yildi.");
 }
 
 async function delReminder(id){
   state.data.reminders = state.data.reminders.filter(r=>r.id!==id);
-  await saveAll(); render();
+  await saveReminders(); render();
 }
 
 function downloadCSV(filename, rows){
@@ -1210,6 +1235,7 @@ function renderProfile(){
       </div>
       <label style="margin-top:16px;">${t('lbl_brauzer_bildirish')}</label>
       <button class="btn-small" id="notifPermBtn">${(window.Notification && Notification.permission==='granted') ? 'Yoqilgan ✓' : 'Ruxsat berish'}</button>
+      <button class="btn-small" id="soundToggleBtn" style="margin-left:6px;">${u.soundOff ? '🔇 Ovoz o\'chiq' : '🔔 Ovoz yoniq'}</button>
     </div>
     <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">${t('chiqish')}</button>
     `;
@@ -1600,6 +1626,13 @@ function attachAppHandlers(){
   if(mh) mh.addEventListener('click', ()=> setReminderMode('har_dars'));
   const npb = document.getElementById('notifPermBtn');
   if(npb) npb.addEventListener('click', requestNotifPerm);
+  const stb = document.getElementById('soundToggleBtn');
+  if(stb) stb.addEventListener('click', async ()=>{
+    state.user.soundOff = !state.user.soundOff;
+    if(!state.user.soundOff) playNotifSound();
+    render();
+    await sSet('account:'+sanitizeKey(state.user.email), state.user);
+  });
   const acb2 = document.getElementById('addChildBtn2');
   if(acb2) acb2.addEventListener('click', ()=> openModal('addChild'));
 
