@@ -521,6 +521,171 @@ function icsDateTime(date, hm){
   const da = String(date.getDate()).padStart(2,'0');
   return `${y}${mo}${da}T${String(h||0).padStart(2,'0')}${String(m||0).padStart(2,'0')}00`;
 }
+// =====================================================================
+// Dars jadvalini Excel/CSV fayldan yuklash
+// =====================================================================
+// Maktablar jadvalni juda xilma-xil ko'rinishda tayyorlaydi, shuning
+// uchun ikkita eng keng tarqalgan formatni "aqlli" taniydi:
+//   A) Jadval ko'rinishi: ustunlar — hafta kunlari, qatorlar — soat/dars
+//      vaqtlari, har bir katakda fan nomi.
+//   B) Ro'yxat ko'rinishi: har bir qatorda alohida — kun, fan, vaqt
+//      (ustun sarlavhalari orqali aniqlanadi: "kun", "fan", "vaqt" va h.k.)
+// Aniqlash 100% kafolatlanmaydi — shuning uchun import qilishdan oldin
+// foydalanuvchiga NATIJANI ko'rsatib, tasdiqlashini so'raymiz.
+const KUN_KEYWORDS = [
+  ['dushanba','du','mon','monday','понедельник','пн'],
+  ['seshanba','se','tue','tuesday','вторник','вт'],
+  ['chorshanba','cho','wed','wednesday','среда','ср'],
+  ['payshanba','pay','thu','thursday','четверг','чт'],
+  ['juma','ju','fri','friday','пятница','пт'],
+  ['shanba','sha','sat','saturday','суббота','сб'],
+  ['yakshanba','yak','sun','sunday','воскресенье','вс']
+];
+function matchWeekday(text){
+  const t = String(text||'').trim().toLowerCase();
+  if(!t) return -1;
+  for(let i=0;i<KUN_KEYWORDS.length;i++){
+    if(KUN_KEYWORDS[i].some(kw=> t===kw || t.startsWith(kw))) return i;
+  }
+  return -1;
+}
+function extractTimeParts(text){
+  const s = String(text||'');
+  const matches = s.match(/(\d{1,2})[:.](\d{2})/g);
+  if(!matches || !matches.length) return null;
+  const norm = matches.map(m=> m.replace('.',':').padStart(5,'0'));
+  return { start: norm[0], end: norm[1] || null };
+}
+function parseScheduleRows(rows){
+  // "rows" — SheetJS'dan kelgan ikki o'lchamli massiv (har bir katak matni).
+  const lessons = [];
+  if(!rows || !rows.length) return lessons;
+
+  // --- B strategiyasi: ustun sarlavhalari orqali (kun/fan/vaqt so'zlari) ---
+  const headerRowIdx = rows.findIndex(r=> r.some(c=> /kun|day|день|fan|subject|предмет/i.test(String(c||''))));
+  if(headerRowIdx >= 0){
+    const header = rows[headerRowIdx].map(c=> String(c||'').toLowerCase());
+    const dayCol = header.findIndex(c=> /kun|day|день/.test(c));
+    const fanCol = header.findIndex(c=> /fan|subject|предмет/.test(c));
+    const vaqtCol = header.findIndex(c=> /vaqt|time|время|boshlan|start/.test(c));
+    const xonaCol = header.findIndex(c=> /xona|room|каб/.test(c));
+    if(dayCol>=0 && fanCol>=0){
+      for(let i=headerRowIdx+1;i<rows.length;i++){
+        const row = rows[i];
+        if(!row) continue;
+        const dow = matchWeekday(row[dayCol]);
+        const fan = String(row[fanCol]||'').trim();
+        if(dow<0 || !fan) continue;
+        const tp = vaqtCol>=0 ? extractTimeParts(row[vaqtCol]) : null;
+        lessons.push({
+          id: uid(), fan,
+          boshlanish: (tp&&tp.start) || '08:00',
+          tugash: (tp&&tp.end) || '',
+          xona: xonaCol>=0 ? String(row[xonaCol]||'').trim() : '',
+          kunlar: [dow]
+        });
+      }
+      if(lessons.length) return lessons;
+    }
+  }
+
+  // --- A strategiyasi: kunlar ustun sarlavhasida, qatorlar — vaqt oralig'i ---
+  for(let hi=0; hi<Math.min(rows.length,5); hi++){
+    const header = rows[hi] || [];
+    const dayCols = header.map((c,idx)=> ({ idx, dow: matchWeekday(c) })).filter(x=>x.dow>=0);
+    if(dayCols.length >= 2){
+      for(let i=hi+1;i<rows.length;i++){
+        const row = rows[i];
+        if(!row) continue;
+        const tp = extractTimeParts(row[0]);
+        dayCols.forEach(({idx,dow})=>{
+          const fan = String(row[idx]||'').trim();
+          if(!fan) return;
+          lessons.push({
+            id: uid(), fan,
+            boshlanish: (tp&&tp.start) || '08:00',
+            tugash: (tp&&tp.end) || '',
+            xona: '',
+            kunlar: [dow]
+          });
+        });
+      }
+      if(lessons.length) return lessons;
+      break;
+    }
+  }
+  return lessons;
+}
+
+function handleScheduleFileInput(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  if(typeof XLSX === 'undefined'){ showToast("Fayl o'qish kutubxonasi yuklanmadi. Qayta urinib ko'ring."); return; }
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    try{
+      const wb = XLSX.read(ev.target.result, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
+      const lessons = parseScheduleRows(rows);
+      if(!lessons.length){
+        showToast("Faylda dars jadvalini tanib bo'lmadi. Fayl tuzilishini tekshiring yoki qo'lda kiriting.");
+        return;
+      }
+      state.modal = { kind: 'importPreview', lessons };
+      render();
+    }catch(err){
+      console.error('schedule import', err);
+      showToast("Faylni o'qishda xatolik yuz berdi.");
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  e.target.value = '';
+}
+
+async function confirmScheduleImport(){
+  const lessons = (state.modal && state.modal.lessons) || [];
+  const selected = lessons.filter(l=> l._checked !== false);
+  if(!selected.length){ closeModal(); return; }
+  selected.forEach(l=>{ delete l._checked; });
+  state.data.schedule = state.data.schedule.concat(selected);
+  state.data.schedule.sort((a,b)=> a.boshlanish.localeCompare(b.boshlanish));
+  await saveSchedule();
+  closeModal();
+  showToast(`${selected.length} ta dars jadvalga qo'shildi.`);
+}
+
+function exportBackupJSON(){
+  let payload;
+  if(state.user.role === 'talaba'){
+    payload = {
+      turi: 'Reja — talaba zaxira nusxasi',
+      sana: new Date().toISOString(),
+      profil: { ism: state.user.ism, email: state.user.email, muassasaNomi: state.user.muassasaNomi, sinf: state.user.sinf },
+      jadval: state.data.schedule,
+      rejalar: state.data.plans,
+      eslatmalar: state.data.reminders
+    };
+  } else {
+    payload = {
+      turi: 'Reja — ota-ona zaxira nusxasi',
+      sana: new Date().toISOString(),
+      profil: { ism: state.user.ism, email: state.user.email },
+      farzandlar: (state.parentData.children||[]).map(c=>({
+        ism: c.acc.ism, email: c.email, muassasaNomi: c.acc.muassasaNomi, sinf: c.acc.sinf,
+        rejalar: c.plans, eslatmalar: c.reminders
+      }))
+    };
+  }
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'reja-zaxira-'+todayISO()+'.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Zaxira nusxa yuklab olindi.');
+}
+
 function exportScheduleICS(){
   if(!state.data.schedule.length){ showToast("Jadval bo'sh, eksport qilib bo'lmaydi."); return; }
   let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Reja//UZ\r\nCALSCALE:GREGORIAN\r\n';
@@ -947,7 +1112,7 @@ function renderAuth(){
       </form>
       <button class="btn-ghost" id="toLogin" style="margin-top:12px;">Hisobingiz bormi? Kiring</button>
       `}
-      <div class="note">Kirish va ro'yxatdan o'tish Firebase Authentication orqali xavfsiz tarzda amalga oshiriladi.</div>
+      <div class="note">Kirish va ro'yxatdan o'tish Firebase Authentication orqali xavfsiz tarzda amalga oshiriladi. Ro'yxatdan o'tish orqali <a href="privacy.html" target="_blank" style="color:var(--accent-deep);">Maxfiylik siyosati</a>ga rozilik bildirasiz.</div>
     </div>
     `}
   </div>`;
@@ -1161,8 +1326,11 @@ function renderSchedule(){
         <button class="btn-small ${view==='grid'?'btn-plum':''}" data-schedule-view="grid">▦ ${t('korinish_jadval')}</button>
         <button class="btn-small" data-export="jadval">⬇ CSV</button>
         <button class="btn-small" id="icsExportBtn">📅 Taqvimga</button>
+        <button class="btn-small btn-plum" id="scheduleFileBtn">📤 Fayldan yuklash</button>
+        <input type="file" id="scheduleFileInput" accept=".xlsx,.xls,.csv" style="display:none;">
       </div>
     </div>
+    <p class="item-meta" style="margin-top:-2px;margin-bottom:10px;">Excel (.xlsx) yoki CSV fayldan jadvalni avtomatik yuklashga urinib ko'rishingiz mumkin — natijani tasdiqlashdan oldin ko'rib chiqasiz.</p>
     ${view==='grid' ? renderScheduleGrid(grouped) : renderScheduleList(grouped)}
   </div>`;
 }
@@ -1295,6 +1463,11 @@ function renderProfile(){
       <button class="btn-small" id="notifPermBtn">${(window.Notification && Notification.permission==='granted') ? 'Yoqilgan ✓' : 'Ruxsat berish'}</button>
       <button class="btn-small" id="soundToggleBtn" style="margin-left:6px;">${u.soundOff ? '🔇 Ovoz o\'chiq' : '🔔 Ovoz yoniq'}</button>
     </div>
+    <div class="sheet">
+      <div class="eyebrow">Ma'lumotlarim</div>
+      <p class="item-meta" style="margin-bottom:8px;">Jadval, rejalar va eslatmalaringizni bitta faylga zaxira sifatida yuklab oling.</p>
+      <button class="btn-small" id="backupBtn">⬇ Zaxira nusxa (JSON)</button>
+    </div>
     <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">${t('chiqish')}</button>
     `;
   }
@@ -1311,6 +1484,11 @@ function renderProfile(){
       <div class="eyebrow">${t('farzand_qoshish')}</div>
       <p>${t('farzand_qoshish_izoh')}</p>
       <button class="btn-small btn-plum" id="addChildBtn2">Farzand qo'shish</button>
+    </div>
+    <div class="sheet">
+      <div class="eyebrow">Ma'lumotlarim</div>
+      <p class="item-meta" style="margin-bottom:8px;">Farzandlaringiz uchun qo'shgan reja/eslatmalaringizni bitta faylga zaxira sifatida yuklab oling.</p>
+      <button class="btn-small" id="backupBtn">⬇ Zaxira nusxa (JSON)</button>
     </div>
     <button class="btn-small btn-danger" id="logoutBtn" style="margin:0 16px;width:calc(100% - 32px);">${t('chiqish')}</button>
     `;
@@ -1370,12 +1548,19 @@ function renderParentHome(){
 function renderParentChildren(){
   const children = state.parentData.children || [];
   if(!children.length) return `<div class="sheet"><div class="empty">${svgIcon('users')}<div>Hali farzand bog'lanmagan. Pastdagi + tugmasi orqali qo'shing.</div></div></div>`;
-  return children.map(c=>{
+  const switcher = children.length > 1 ? `
+  <div class="sheet" style="padding:12px 14px;">
+    <div class="eyebrow" style="margin-bottom:8px;">Tez o'tish</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      ${children.map(c=>`<a href="#child-${escapeHtml(sanitizeKey(c.email))}" class="btn-small" style="text-decoration:none;">${escapeHtml((c.acc.ism||'').split(' ')[0])}</a>`).join('')}
+    </div>
+  </div>` : '';
+  return switcher + children.map(c=>{
     const upcomingPlans = c.plans.filter(p=>p.sana>=todayISO()).slice(0,4);
     const upcomingRems = c.reminders.filter(r=>r.sana>=todayISO()).slice(0,4);
     const unread = (state.parentData.unreadByEmail||{})[c.email] || 0;
     return `
-    <div class="sheet">
+    <div class="sheet" id="child-${escapeHtml(sanitizeKey(c.email))}">
       <div class="child-row" style="margin-bottom:10px;">
         <div class="avatar">${initials(c.acc.ism)}</div>
         <div style="flex:1;">
@@ -1420,6 +1605,28 @@ function renderParentChildren(){
 
 function renderModal(){
   const k = state.modal.kind;
+  if(k==='importPreview'){
+    const lessons = state.modal.lessons || [];
+    return `
+  <div class="modal-wrap" id="modalWrap">
+    <div class="modal">
+      <div class="modal-head"><h3>Aniqlangan darslar (${lessons.length})</h3><button class="close-x" id="modalClose">✕</button></div>
+      <p class="item-meta" style="margin-bottom:10px;">Quyidagilar fayldan aniqlandi. Noto'g'ri aniqlanganlarini belgisini olib tashlang, keyin qo'shing — kerak bo'lsa keyinroq har birini alohida tahrirlashingiz mumkin.</p>
+      <div style="max-height:340px;overflow-y:auto;">
+        ${lessons.map((l,idx)=>`
+          <label style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);">
+            <input type="checkbox" data-import-idx="${idx}" checked style="margin-top:3px;width:16px;height:16px;flex-shrink:0;">
+            <div>
+              <div class="item-title" style="font-size:13.5px;">${escapeHtml(l.fan)}</div>
+              <div class="item-meta">${KUN_FULL[l.kunlar[0]]} · ${l.boshlanish}${l.tugash?'–'+l.tugash:''}${l.xona?' · '+escapeHtml(l.xona):''}</div>
+            </div>
+          </label>
+        `).join('')}
+      </div>
+      <button class="btn-primary" id="confirmImportBtn" style="margin-top:14px;">Tanlanganlarni qo'shish</button>
+    </div>
+  </div>`;
+  }
   if(k==='lesson'){
     const editing = !!state.modal.editId;
     const l = editing ? state.data.schedule.find(x=>x.id===state.modal.editId) : null;
@@ -1702,6 +1909,12 @@ function attachAppHandlers(){
   document.querySelectorAll('[data-schedule-view]').forEach(b=> b.addEventListener('click', ()=>{ state.scheduleView = b.dataset.scheduleView; render(); }));
   const icsb = document.getElementById('icsExportBtn');
   if(icsb) icsb.addEventListener('click', exportScheduleICS);
+  const bkb = document.getElementById('backupBtn');
+  if(bkb) bkb.addEventListener('click', exportBackupJSON);
+  const sfb = document.getElementById('scheduleFileBtn');
+  const sfi = document.getElementById('scheduleFileInput');
+  if(sfb && sfi) sfb.addEventListener('click', ()=> sfi.click());
+  if(sfi) sfi.addEventListener('change', handleScheduleFileInput);
   const annSearch = document.getElementById('annSearchInput');
   if(annSearch){
     annSearch.addEventListener('input', ()=>{
@@ -1750,6 +1963,13 @@ function attachAppHandlers(){
   if(mc) mc.addEventListener('click', closeModal);
   const mw = document.getElementById('modalWrap');
   if(mw) mw.addEventListener('click', (e)=>{ if(e.target.id==='modalWrap') closeModal(); });
+
+  document.querySelectorAll('[data-import-idx]').forEach(cb=> cb.addEventListener('change', ()=>{
+    const idx = parseInt(cb.dataset.importIdx,10);
+    if(state.modal && state.modal.lessons && state.modal.lessons[idx]) state.modal.lessons[idx]._checked = cb.checked;
+  }));
+  const cib = document.getElementById('confirmImportBtn');
+  if(cib) cib.addEventListener('click', confirmScheduleImport);
 
   document.querySelectorAll('.dow-chip').forEach(c=> c.addEventListener('click', ()=> toggleDowChip(c)));
 
