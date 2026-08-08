@@ -53,7 +53,15 @@ async function boot(){
 async function loginAs(acc){
   if(!acc.ism) acc.ism = acc.email;
   state.user = acc;
-  state.theme = acc.theme || 'light';
+  // Agar foydalanuvchi hali birorta ham rejimni o'zi tanlamagan bo'lsa
+  // (acc.theme umuman yo'q), qurilma/brauzer sozlamasidagi kun/tun
+  // afzalligini avtomatik aniqlaymiz — shunda ilova birinchi marta
+  // ochilganda ham to'g'ri rejimda ko'rinadi.
+  if(acc.theme){
+    state.theme = acc.theme;
+  } else {
+    state.theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  }
   state.lang = acc.lang || 'uz';
   sessionMem = acc.email;
   if(acc.role === 'talaba'){
@@ -491,6 +499,55 @@ async function addReminder(e){
 async function delReminder(id){
   state.data.reminders = state.data.reminders.filter(r=>r.id!==id);
   await saveReminders(); render();
+}
+
+// ===== Dars jadvalini taqvimga (.ics) eksport qilish =====
+// Google Calendar, Outlook, Apple Calendar — deyarli barcha taqvim
+// ilovalari .ics faylini import qila oladi. Har bir dars, har bir hafta
+// kuni uchun alohida haftalik takrorlanuvchi voqea (RRULE) sifatida
+// yaratiladi.
+const ICS_DOW = ['MO','TU','WE','TH','FR','SA','SU'];
+function nextDateForWeekday(targetDow){
+  const now = new Date();
+  const curDow = (now.getDay()+6)%7; // JS: Yak=0..Shan=6 → Dush=0..Yak=6 ga o'giramiz
+  const diff = (targetDow - curDow + 7) % 7;
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate()+diff);
+  return d;
+}
+function icsDateTime(date, hm){
+  const [h,m] = (hm||'00:00').split(':').map(Number);
+  const y = date.getFullYear();
+  const mo = String(date.getMonth()+1).padStart(2,'0');
+  const da = String(date.getDate()).padStart(2,'0');
+  return `${y}${mo}${da}T${String(h||0).padStart(2,'0')}${String(m||0).padStart(2,'0')}00`;
+}
+function exportScheduleICS(){
+  if(!state.data.schedule.length){ showToast("Jadval bo'sh, eksport qilib bo'lmaydi."); return; }
+  let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Reja//UZ\r\nCALSCALE:GREGORIAN\r\n';
+  const stampNow = new Date();
+  const stamp = icsDateTime(stampNow, stampNow.toTimeString().slice(0,5)) + 'Z';
+  state.data.schedule.forEach(l=>{
+    (l.kunlar||[]).forEach(dow=>{
+      const d = nextDateForWeekday(dow);
+      ics += 'BEGIN:VEVENT\r\n';
+      ics += `UID:${l.id}-${dow}@reja-app\r\n`;
+      ics += `DTSTAMP:${stamp}\r\n`;
+      ics += `DTSTART:${icsDateTime(d, l.boshlanish)}\r\n`;
+      ics += `DTEND:${icsDateTime(d, l.tugash||l.boshlanish)}\r\n`;
+      ics += `RRULE:FREQ=WEEKLY;BYDAY=${ICS_DOW[dow]}\r\n`;
+      ics += `SUMMARY:${(l.fan||'').replace(/[\r\n]/g,' ')}\r\n`;
+      if(l.xona) ics += `LOCATION:${l.xona.replace(/[\r\n]/g,' ')}\r\n`;
+      ics += 'END:VEVENT\r\n';
+    });
+  });
+  ics += 'END:VCALENDAR\r\n';
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'dars-jadvali.ics';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Taqvim fayli yuklab olindi. Uni Google Calendar yoki boshqa taqvim ilovasiga import qilishingiz mumkin.');
 }
 
 function downloadCSV(filename, rows){
@@ -1103,6 +1160,7 @@ function renderSchedule(){
         <button class="btn-small ${view==='list'?'btn-plum':''}" data-schedule-view="list">☰ ${t('korinish_royxat')}</button>
         <button class="btn-small ${view==='grid'?'btn-plum':''}" data-schedule-view="grid">▦ ${t('korinish_jadval')}</button>
         <button class="btn-small" data-export="jadval">⬇ CSV</button>
+        <button class="btn-small" id="icsExportBtn">📅 Taqvimga</button>
       </div>
     </div>
     ${view==='grid' ? renderScheduleGrid(grouped) : renderScheduleList(grouped)}
@@ -1642,6 +1700,8 @@ function attachAppHandlers(){
   document.querySelectorAll('[data-export]').forEach(b=> b.addEventListener('click', ()=> exportCSV(b.dataset.export)));
   document.querySelectorAll('[data-edit-lesson]').forEach(b=> b.addEventListener('click', ()=> openModal('lesson', { editId: b.dataset.editLesson })));
   document.querySelectorAll('[data-schedule-view]').forEach(b=> b.addEventListener('click', ()=>{ state.scheduleView = b.dataset.scheduleView; render(); }));
+  const icsb = document.getElementById('icsExportBtn');
+  if(icsb) icsb.addEventListener('click', exportScheduleICS);
   const annSearch = document.getElementById('annSearchInput');
   if(annSearch){
     annSearch.addEventListener('input', ()=>{
