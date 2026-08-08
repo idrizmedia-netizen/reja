@@ -62,7 +62,8 @@ async function loadSuperAdminData(){
   const users = fetched.filter(Boolean);
   const talabalar = users.filter(u=>u.role==='talaba');
   const otaOnalar = users.filter(u=>u.role==='ota_ona');
-  state.adminData = Object.assign({}, state.adminData, { allUsers: users, talabalar, otaOnalar });
+  const eskiHisoblar = users.filter(u=>u.role!=='talaba' && u.role!=='ota_ona');
+  state.adminData = Object.assign({}, state.adminData, { allUsers: users, talabalar, otaOnalar, eskiHisoblar });
 }
 
 async function superDeleteUser(email){
@@ -71,7 +72,7 @@ async function superDeleteUser(email){
   if(!acc) return;
   const keysToDelete = ['account:'+ek];
   if(acc.role==='talaba'){
-    keysToDelete.push('schedule:'+ek, 'plans:'+ek, 'reminders:'+ek, 'grades:'+ek, 'homework:'+ek);
+    keysToDelete.push('schedule:'+ek, 'plans:'+ek, 'reminders:'+ek);
     await lrDeleteAllForStudent(ek);
     await studentDirRemove(ek);
   } else if(acc.role==='ota_ona'){
@@ -228,6 +229,12 @@ function renderSAUsers(){
     <div class="eyebrow">Ota-onalar (${(d.otaOnalar||[]).length})</div>
     ${section(d.otaOnalar||[])}
   </div>
+  ${(d.eskiHisoblar||[]).length ? `
+  <div class="sheet">
+    <div class="eyebrow">Eski/nomos hisoblar (${d.eskiHisoblar.length})</div>
+    <p class="item-meta" style="margin-bottom:10px;">Bular ilova endi tushunmaydigan rolga ega hisoblar (masalan avvalgi "muassasa" roli). Xohlasangiz o'chirib tashlashingiz mumkin.</p>
+    ${section(d.eskiHisoblar)}
+  </div>` : ''}
   `;
 }
 
