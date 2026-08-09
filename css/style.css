@@ -196,3 +196,8 @@
     .tab svg{ width: 18px; height: 18px; }
     .dot{ right: auto; left: 6px; top: 6px; }
   }
+
+/* Reklama karuseli — scrollbar chizig'ini yashiramiz, chunki nuqta
+   ko'rinishidagi tabiiy tortish (swipe) his qilinishi kifoya. */
+.sheet > div[style*="overflow-x:auto"]::-webkit-scrollbar{ display:none; }
+.sheet > div[style*="overflow-x:auto"]{ scrollbar-width:none; }
