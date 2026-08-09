@@ -14,7 +14,9 @@ let state = {
   modal: null,
   firedKeys: new Set(),
   broadcasts: [],
-  broadcastUnread: 0
+  broadcastUnread: 0,
+  ads: [],
+  dismissedAds: new Set()
 };
 
 let sessionMem = null;
@@ -97,6 +99,7 @@ async function loginAs(acc){
     startThreadListeners(state.parentData.children.map(c=>c.email), 'parent');
   }
   startBroadcastListener();
+  loadAdsForUser();
   state.view = 'app';
   state.tab = defaultTab();
   if(acc.onboarded !== true){ state.showOnboarding = true; state.onboardStep = 0; }
@@ -210,6 +213,58 @@ async function markBroadcastsRead(){
   state.broadcastUnread = 0;
   render();
   await sSet('account:'+sanitizeKey(state.user.email), state.user);
+}
+
+// =====================================================================
+// Reklama bannerlar — tizim egasi joylashtirgan, barcha foydalanuvchilarga
+// ko'rinadigan reklamalar.
+// =====================================================================
+async function loadAdsForUser(){
+  try{
+    const all = await adsList();
+    state.ads = all.filter(a=> a.active !== false);
+    render();
+  }catch(e){ console.error('loadAdsForUser', e); }
+}
+
+function dismissAd(id){
+  state.dismissedAds.add(id);
+  render();
+}
+
+// YouTube/Vimeo havolasini iframe'ga, boshqa (.mp4 kabi) havolani esa
+// oddiy <video> playerga aylantiradi.
+function videoEmbedHtml(url){
+  if(!url) return '';
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
+  if(yt){
+    return `<iframe width="100%" height="180" style="border:none;border-radius:10px;" src="https://www.youtube.com/embed/${yt[1]}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+  }
+  const vm = url.match(/vimeo\.com\/(\d+)/);
+  if(vm){
+    return `<iframe width="100%" height="180" style="border:none;border-radius:10px;" src="https://player.vimeo.com/video/${vm[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
+  }
+  return `<video controls style="width:100%;border-radius:10px;max-height:220px;background:#000;"><source src="${escapeHtml(url)}"></video>`;
+}
+
+function renderAdBanner(){
+  const ads = (state.ads||[]).filter(a=> !state.dismissedAds.has(a.id));
+  if(!ads.length) return '';
+  return `
+  <div class="sheet" style="padding:0;overflow:hidden;">
+    <div style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:0;">
+      ${ads.map(a=>`
+        <div style="min-width:100%;scroll-snap-align:start;position:relative;padding:14px;">
+          <button data-dismiss-ad="${a.id}" title="Yopish" style="position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,0.45);color:#fff;border:none;font-size:14px;line-height:1;cursor:pointer;z-index:2;">✕</button>
+          ${a.videoUrl ? videoEmbedHtml(a.videoUrl) : (a.imageUrl ? `<img src="${a.imageUrl}" style="width:100%;border-radius:10px;max-height:220px;object-fit:cover;display:block;">` : '')}
+          <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <div class="item-title" style="font-size:13.5px;">${escapeHtml(a.title||'')}</div>
+            ${a.linkUrl ? `<a href="${escapeHtml(a.linkUrl)}" target="_blank" rel="noopener noreferrer" class="btn-small btn-plum" style="text-decoration:none;flex-shrink:0;">Ko'rish →</a>` : ''}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  </div>`;
 }
 
 async function loadParentChildren(){
@@ -506,6 +561,8 @@ function logout(){
   state.view = 'auth';
   state.authMode = 'login';
   state.parentData = { children: [], requests: [], unreadByEmail: {} };
+  state.ads = [];
+  state.dismissedAds = new Set();
   render();
 }
 
@@ -1420,6 +1477,7 @@ function renderHome(){
     <p style="margin-bottom:8px;">${state.user.reminderMode==='har_dars' ? 'Har darsdan 5 daqiqa oldin eslatiladi.' : "Kuniga bir marta, ertalab bugungi darslar haqida eslatiladi."}</p>
     <button class="btn-small" id="goProfileBtn">Sozlamalarni o'zgartirish →</button>
   </div>
+  ${renderAdBanner()}
   `;
 }
 
@@ -1651,6 +1709,7 @@ function renderParentHome(){
     }).join('')}
   </div>` : ''}
   ${children.length ? `<div class="sheet"><div class="eyebrow">Tezkor</div><button class="btn-small" id="goChildrenBtn">Farzandlarni boshqarish →</button></div>` : ''}
+  ${renderAdBanner()}
   `;
 }
 
@@ -2086,6 +2145,7 @@ function attachAppHandlers(){
   }));
   const nbb = document.getElementById('notifBellBtn');
   if(nbb) nbb.addEventListener('click', ()=>{ markBroadcastsRead(); openModal('notifications'); });
+  document.querySelectorAll('[data-dismiss-ad]').forEach(b=> b.addEventListener('click', ()=> dismissAd(b.dataset.dismissAd)));
   document.querySelectorAll('[data-parent-add-plan]').forEach(b=> b.addEventListener('click', ()=> openModal('parentPlan', { childEmail: b.dataset.parentAddPlan })));
   document.querySelectorAll('[data-parent-add-reminder]').forEach(b=> b.addEventListener('click', ()=> openModal('parentReminder', { childEmail: b.dataset.parentAddReminder })));
   document.querySelectorAll('[data-parent-edit-plan]').forEach(b=> b.addEventListener('click', ()=>{
