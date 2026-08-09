@@ -18,7 +18,7 @@ let state = {
   lang: 'uz',
   user: null,          // { ism, email }
   tab: 'sa_umumiy',
-  adminData: { allUsers: [], talabalar: [], otaOnalar: [], errorLogs: [], errorLogsLoaded: false },
+  adminData: { allUsers: [], talabalar: [], otaOnalar: [], errorLogs: [], errorLogsLoaded: false, broadcasts: [], broadcastsLoaded: false },
   toast: null
 };
 
@@ -91,9 +91,43 @@ function switchTab(t){
   state.tab = t;
   if(t==='sa_errors' && !state.adminData.errorLogsLoaded){
     loadErrorLogs().then(render);
+  } else if(t==='sa_broadcast' && !state.adminData.broadcastsLoaded){
+    loadBroadcasts().then(render);
   } else {
     render();
   }
+}
+
+async function loadBroadcasts(){
+  state.adminData.broadcasts = await broadcastList(50);
+  state.adminData.broadcastsLoaded = true;
+}
+
+async function sendBroadcast(e){
+  e.preventDefault();
+  const f = e.target;
+  const title = f.title.value.trim();
+  const body = f.body.value.trim();
+  const audience = f.audience.value;
+  const errBox = document.getElementById('modal-err') || document.getElementById('broadcast-err');
+  if(!title || !body){ if(errBox) errBox.textContent = "Sarlavha va matnni to'ldiring."; return; }
+  try{
+    await broadcastCreate({ title, body, audience, adminEmail: OWNER_EMAIL });
+  }catch(err){
+    if(errBox) errBox.textContent = "Yuborishda xatolik yuz berdi.";
+    return;
+  }
+  f.reset();
+  await loadBroadcasts();
+  render();
+  showToast("Bildirishnoma yuborildi.");
+}
+
+async function delBroadcast(id){
+  if(!confirm("Bu bildirishnomani o'chirmoqchimisiz?")) return;
+  try{ await broadcastDelete(id); }catch(err){ showToast("O'chirishda xatolik yuz berdi."); return; }
+  state.adminData.broadcasts = (state.adminData.broadcasts||[]).filter(b=>b.id!==id);
+  render();
 }
 
 // Foydalanuvchilar tomonida yuz bergan JS xatoliklari (window.addEventListener
@@ -156,12 +190,52 @@ function renderDashboard(){
   ${state.tab==='sa_umumiy' ? renderSAOverview() : ''}
   ${state.tab==='sa_users' ? renderSAUsers() : ''}
   ${state.tab==='sa_errors' ? renderSAErrors() : ''}
+  ${state.tab==='sa_broadcast' ? renderSABroadcast() : ''}
   <div class="tabs">
     <button class="tab ${state.tab==='sa_umumiy'?'active':''}" data-tab="sa_umumiy">${svgIcon('home')}<span>${t('tab_umumiy')}</span></button>
     <button class="tab ${state.tab==='sa_users'?'active':''}" data-tab="sa_users">${svgIcon('users')}<span>${t('tab_users')}</span></button>
+    <button class="tab ${state.tab==='sa_broadcast'?'active':''}" data-tab="sa_broadcast">${svgIcon('bell')}<span>Bildirishnoma</span></button>
     <button class="tab ${state.tab==='sa_errors'?'active':''}" data-tab="sa_errors">${svgIcon('speaker')}<span>Xatoliklar</span></button>
   </div>
   `;
+}
+
+function renderSABroadcast(){
+  const list = state.adminData.broadcasts || [];
+  const AUD_LABEL = { all: 'Hammaga', talaba: "Faqat o'quvchi/talabalarga", ota_ona: 'Faqat ota-onalarga' };
+  return `
+  <div class="sheet sheet-plum">
+    <div class="eyebrow">Yangi bildirishnoma yuborish</div>
+    <form id="broadcastForm">
+      <label>Sarlavha</label>
+      <input type="text" name="title" placeholder="Masalan: Ta'til haqida e'lon" required>
+      <label>Matn</label>
+      <textarea name="body" rows="4" placeholder="Xabar matni..." required></textarea>
+      <label>Kimga yuborilsin</label>
+      <select name="audience">
+        <option value="all">Hammaga</option>
+        <option value="talaba">Faqat o'quvchi/talabalarga</option>
+        <option value="ota_ona">Faqat ota-onalarga</option>
+      </select>
+      <div id="broadcast-err" class="err"></div>
+      <button class="btn-primary" type="submit" style="margin-top:10px;">Yuborish</button>
+    </form>
+  </div>
+  <div class="sheet">
+    <div class="eyebrow">Yuborilgan bildirishnomalar (${list.length})</div>
+    ${list.length ? list.map(b=>`
+      <div class="plan-item">
+        <div class="item-top">
+          <div>
+            <div class="item-title">${escapeHtml(b.title||'')}</div>
+            <div class="item-meta">${escapeHtml(b.body||'')}</div>
+            <div class="item-meta">${AUD_LABEL[b.audience]||'Hammaga'} · ${b.createdAt?new Date(b.createdAt).toLocaleString('uz-UZ'):''}</div>
+          </div>
+          <button class="del" data-del-broadcast="${b.id}">✕</button>
+        </div>
+      </div>
+    `).join('') : `<div class="empty">${svgIcon('speaker')}<div>Hali bildirishnoma yuborilmagan.</div></div>`}
+  </div>`;
 }
 
 function renderSAErrors(){
@@ -254,6 +328,9 @@ function attachDashboardHandlers(){
   }));
   const reb = document.getElementById('refreshErrorsBtn');
   if(reb) reb.addEventListener('click', async ()=>{ await loadErrorLogs(); render(); });
+  const bf = document.getElementById('broadcastForm');
+  if(bf) bf.addEventListener('submit', sendBroadcast);
+  document.querySelectorAll('[data-del-broadcast]').forEach(b=> b.addEventListener('click', ()=> delBroadcast(b.dataset.delBroadcast)));
 }
 
 render();
