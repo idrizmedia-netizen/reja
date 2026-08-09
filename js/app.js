@@ -12,7 +12,9 @@ let state = {
   parentData: { children: [], requests: [], unreadByEmail: {} },
   toast: null,
   modal: null,
-  firedKeys: new Set()
+  firedKeys: new Set(),
+  broadcasts: [],
+  broadcastUnread: 0
 };
 
 let sessionMem = null;
@@ -81,12 +83,20 @@ async function loginAs(acc){
     state.data.reminders = rm || [];
     const allReqs = await lrListForStudent(sanitizeKey(acc.email));
     state.parentData.requests = allReqs.filter(r=>r.status==='pending');
-    state.parentData.linkedParents = allReqs.filter(r=>r.status==='accepted').map(r=>r.parentEmail);
+    const accepted = allReqs.filter(r=>r.status==='accepted');
+    state.parentData.linkedParents = accepted.map(r=>r.parentEmail);
+    state.parentData.partnerNames = {};
+    accepted.forEach(r=>{ state.parentData.partnerNames[r.parentEmail] = r.parentName || r.parentEmail; });
     await computeUnread(state.parentData.linkedParents, 'child');
+    startThreadListeners(state.parentData.linkedParents, 'child');
   } else if(acc.role === 'ota_ona'){
     await loadParentChildren();
+    state.parentData.partnerNames = {};
+    state.parentData.children.forEach(c=>{ state.parentData.partnerNames[c.email] = c.acc.ism || c.email; });
     await computeUnread(state.parentData.children.map(c=>c.email), 'parent');
+    startThreadListeners(state.parentData.children.map(c=>c.email), 'parent');
   }
+  startBroadcastListener();
   state.view = 'app';
   state.tab = defaultTab();
   if(acc.onboarded !== true){ state.showOnboarding = true; state.onboardStep = 0; }
@@ -116,6 +126,89 @@ async function markThreadRead(partnerEmail){
   if(!state.user.lastRead) state.user.lastRead = {};
   state.user.lastRead[tKey] = Date.now();
   state.parentData.unreadByEmail[partnerEmail] = 0;
+  await sSet('account:'+sanitizeKey(state.user.email), state.user);
+}
+
+// =====================================================================
+// Real-vaqtda xabar bildirishnomasi — ota-ona ↔ farzand
+// =====================================================================
+// Ilova ochiq turgan payt (hatto boshqa tab'da bo'lsa ham), har bir
+// suhbat (thread) hujjatini Firestore'ning onSnapshot() orqali "tinglab"
+// turamiz. Yangi xabar kelishi bilan — sahifani qayta yuklamasdan —
+// darhol: (1) brauzer/tizim bildirishnomasi (desktop'da pastki
+// burchakda, telefonda yuqorida chiqadigan turdagi), (2) tovush,
+// (3) ekrandagi qo'ng'iroq belgisi yangilanadi.
+let _threadListeners = [];
+function stopThreadListeners(){
+  _threadListeners.forEach(unsub=>{ try{ unsub(); }catch(e){} });
+  _threadListeners = [];
+}
+function startThreadListeners(partnerEmails, myRole){
+  stopThreadListeners();
+  (partnerEmails||[]).forEach(partnerEmail=>{
+    const tKey = threadKey(state.user.email, partnerEmail);
+    let firstSnapshot = true;
+    try{
+      const unsub = _db.collection('kv').doc(tKey).onSnapshot((doc)=>{
+        const thread = (doc.exists && doc.data().value) || [];
+        const lastRead = (state.user.lastRead||{})[tKey] || 0;
+        const unread = thread.filter(m=> m.from !== myRole && m.ts > lastRead);
+        state.parentData.unreadByEmail = state.parentData.unreadByEmail || {};
+        state.parentData.unreadByEmail[partnerEmail] = unread.length;
+        // Modal ochiq bo'lsa (shu suhbat ko'rilayotgan bo'lsa), ichini yangilaymiz.
+        if(state.modal && state.modal.kind==='chat' && state.modal.tKey===tKey){
+          state.modal.thread = thread;
+        }
+        // Birinchi marta ulanganda (sahifa hozirgina ochilganda) eski
+        // xabarlar uchun bildirishnoma "jiringlatilmaydi" — faqat
+        // ilova ochiq turgan paytda YANGI kelgan xabarlar uchun.
+        if(!firstSnapshot && unread.length){
+          const last = unread[unread.length-1];
+          const name = (state.parentData.partnerNames||{})[partnerEmail] || partnerEmail;
+          fireNotif(name, last.matn);
+        }
+        firstSnapshot = false;
+        render();
+      });
+      _threadListeners.push(unsub);
+    }catch(e){ console.error('startThreadListeners', e); }
+  });
+}
+
+// =====================================================================
+// Real-vaqtda tizim egasi bildirishnomalari (broadcasts)
+// =====================================================================
+let _broadcastUnsub = null;
+function stopBroadcastListener(){
+  if(_broadcastUnsub){ try{ _broadcastUnsub(); }catch(e){} _broadcastUnsub = null; }
+}
+function startBroadcastListener(){
+  stopBroadcastListener();
+  if(!state.user) return;
+  const myRole = state.user.role;
+  let firstSnapshot = true;
+  try{
+    _broadcastUnsub = _db.collection('broadcasts').orderBy('createdAt','desc').limit(30)
+      .onSnapshot((snap)=>{
+        const all = snap.docs.map(d=> Object.assign({ id: d.id }, d.data()));
+        const mine = all.filter(b=> !b.audience || b.audience==='all' || b.audience===myRole);
+        state.broadcasts = mine;
+        const lastRead = state.user.lastReadBroadcast || 0;
+        const unread = mine.filter(b=> b.createdAt > lastRead);
+        state.broadcastUnread = unread.length;
+        if(!firstSnapshot && unread.length){
+          const newest = unread[0];
+          fireNotif(newest.title || 'Yangi bildirishnoma', newest.body || '');
+        }
+        firstSnapshot = false;
+        render();
+      }, (err)=>{ console.error('broadcast listener', err); });
+  }catch(e){ console.error('startBroadcastListener', e); }
+}
+async function markBroadcastsRead(){
+  state.user.lastReadBroadcast = Date.now();
+  state.broadcastUnread = 0;
+  render();
   await sSet('account:'+sanitizeKey(state.user.email), state.user);
 }
 
@@ -407,6 +500,8 @@ function logout(){
   _auth.signOut().catch(()=>{});
   sessionMem = null;
   if(engineTimer) clearInterval(engineTimer);
+  stopThreadListeners();
+  stopBroadcastListener();
   state.user = null;
   state.view = 'auth';
   state.authMode = 'login';
@@ -842,7 +937,12 @@ async function respondLinkRequest(parentKey, accept){
   }
   const allReqs = await lrListForStudent(selfKey);
   state.parentData.requests = allReqs.filter(r=>r.status==='pending');
-  state.parentData.linkedParents = allReqs.filter(r=>r.status==='accepted').map(r=>r.parentEmail);
+  const accepted = allReqs.filter(r=>r.status==='accepted');
+  state.parentData.linkedParents = accepted.map(r=>r.parentEmail);
+  state.parentData.partnerNames = {};
+  accepted.forEach(r=>{ state.parentData.partnerNames[r.parentEmail] = r.parentName || r.parentEmail; });
+  await computeUnread(state.parentData.linkedParents, 'child');
+  startThreadListeners(state.parentData.linkedParents, 'child');
   render();
   showToast(accept ? "Bog'landingiz." : "So'rov rad etildi.");
 }
@@ -1056,6 +1156,10 @@ function renderAuth(){
       </div>
       <form id="googleCompleteForm">
         ${institutionFieldsHtml(role, 'g_')}
+        <label class="checkbox-row" style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;font-weight:400;font-size:13px;">
+          <input type="checkbox" name="acceptTos" required style="margin-top:3px;width:16px;height:16px;flex-shrink:0;">
+          <span><a href="privacy.html" target="_blank" style="color:var(--accent-deep);">Maxfiylik siyosati va foydalanish shartlari</a>ga roziman.</span>
+        </label>
         <div id="auth-err" class="err"></div>
         <button class="btn-primary btn-plum" type="submit">Yakunlash va kirish</button>
       </form>
@@ -1107,12 +1211,16 @@ function renderAuth(){
         <label>${t('lbl_parol')}</label>
         <input type="password" name="parol" placeholder="Kamida 6 ta belgi" required minlength="6">
         ${institutionFieldsHtml(role, '')}
+        <label class="checkbox-row" style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;font-weight:400;font-size:13px;">
+          <input type="checkbox" name="acceptTos" required style="margin-top:3px;width:16px;height:16px;flex-shrink:0;">
+          <span><a href="privacy.html" target="_blank" style="color:var(--accent-deep);">Maxfiylik siyosati va foydalanish shartlari</a>ga roziman.</span>
+        </label>
         <div id="auth-err" class="err"></div>
         <button class="btn-primary" type="submit">${t('royxatdan_otish')}</button>
       </form>
       <button class="btn-ghost" id="toLogin" style="margin-top:12px;">Hisobingiz bormi? Kiring</button>
       `}
-      <div class="note">Kirish va ro'yxatdan o'tish Firebase Authentication orqali xavfsiz tarzda amalga oshiriladi. Ro'yxatdan o'tish orqali <a href="privacy.html" target="_blank" style="color:var(--accent-deep);">Maxfiylik siyosati</a>ga rozilik bildirasiz.</div>
+      <div class="note">Kirish va ro'yxatdan o'tish Firebase Authentication orqali xavfsiz tarzda amalga oshiriladi.</div>
     </div>
     `}
   </div>`;
@@ -1169,6 +1277,7 @@ function renderApp(){
   <div class="topbar">
     <div class="brand">Re<em>ja</em></div>
     <div class="topbar-right">
+      <button class="theme-toggle" id="notifBellBtn" title="Bildirishnomalar" style="position:relative;">${svgIcon('bell')}${(()=>{ const chatUnread = Object.values(state.parentData.unreadByEmail||{}).reduce((a,b)=>a+b,0); const total = chatUnread + (state.broadcastUnread||0); return total ? `<span class="badge unread" style="position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;font-size:10px;display:flex;align-items:center;justify-content:center;padding:0 3px;">${total>9?'9+':total}</span>` : ''; })()}</button>
       <button class="theme-toggle" id="themeToggleBtn" title="Kun/tun rejimi">${svgIcon(state.theme==='dark'?'sun':'moon')}</button>
       <button class="theme-toggle" id="langToggleBtn" title="Til / Язык / Language" style="width:auto;padding:0 10px;font-size:11px;font-weight:700;">${(state.lang||'uz').toUpperCase()}</button>
       <button class="userchip" id="userchipBtn">${escapeHtml((state.user.ism||state.user.email||'').split(' ')[0])} ⌄</button>
@@ -1605,6 +1714,36 @@ function renderParentChildren(){
 
 function renderModal(){
   const k = state.modal.kind;
+  if(k==='notifications'){
+    const partnerNames = state.parentData.partnerNames || {};
+    const unreadChats = Object.entries(state.parentData.unreadByEmail||{}).filter(([,n])=>n>0);
+    const broadcasts = state.broadcasts || [];
+    return `
+  <div class="modal-wrap" id="modalWrap">
+    <div class="modal">
+      <div class="modal-head"><h3>Bildirishnomalar</h3><button class="close-x" id="modalClose">✕</button></div>
+      ${unreadChats.length ? `
+      <div class="eyebrow" style="margin-top:4px;">O'qilmagan xabarlar</div>
+      ${unreadChats.map(([email,n])=>`
+        <div class="plan-item" data-notif-chat="${escapeHtml(email)}|${escapeHtml(partnerNames[email]||email)}" style="cursor:pointer;">
+          <div class="item-top">
+            <div class="item-title">${escapeHtml(partnerNames[email]||email)}</div>
+            <span class="badge unread">${n}</span>
+          </div>
+        </div>
+      `).join('')}` : ''}
+      <div class="eyebrow" style="margin-top:14px;">E'lonlar</div>
+      ${broadcasts.length ? broadcasts.map(b=>`
+        <div class="plan-item">
+          <div class="item-title">${escapeHtml(b.title||'')}</div>
+          <div class="item-meta">${escapeHtml(b.body||'')}</div>
+          <div class="item-meta">${b.createdAt ? new Date(b.createdAt).toLocaleString('uz-UZ') : ''}</div>
+        </div>
+      `).join('') : `<div class="empty">${svgIcon('speaker')}<div>Hozircha bildirishnoma yo'q.</div></div>`}
+      ${!unreadChats.length ? '' : ''}
+    </div>
+  </div>`;
+  }
   if(k==='importPreview'){
     const lessons = state.modal.lessons || [];
     return `
@@ -1940,6 +2079,13 @@ function attachAppHandlers(){
     const [email,name] = b.dataset.chatChild.split('|');
     openChat(email, name, 'parent');
   }));
+  document.querySelectorAll('[data-notif-chat]').forEach(el=> el.addEventListener('click', ()=>{
+    const [email,name] = el.dataset.notifChat.split('|');
+    const myRole = state.user.role==='talaba' ? 'child' : 'parent';
+    openChat(email, name, myRole);
+  }));
+  const nbb = document.getElementById('notifBellBtn');
+  if(nbb) nbb.addEventListener('click', ()=>{ markBroadcastsRead(); openModal('notifications'); });
   document.querySelectorAll('[data-parent-add-plan]').forEach(b=> b.addEventListener('click', ()=> openModal('parentPlan', { childEmail: b.dataset.parentAddPlan })));
   document.querySelectorAll('[data-parent-add-reminder]').forEach(b=> b.addEventListener('click', ()=> openModal('parentReminder', { childEmail: b.dataset.parentAddReminder })));
   document.querySelectorAll('[data-parent-edit-plan]').forEach(b=> b.addEventListener('click', ()=>{
