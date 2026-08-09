@@ -692,3 +692,26 @@ async function broadcastList(limit){
     return snap.docs.map(d=> Object.assign({ id: d.id }, d.data()));
   }catch(e){ console.error('broadcastList', e); return []; }
 }
+
+// =====================================================================
+// Reklama bannerlar — tizim egasi joylashtiradi, barcha foydalanuvchilarga
+// ko'rinadi.
+// =====================================================================
+function adsCollection(){
+  return _db.collection('ads');
+}
+async function adsList(){
+  try{
+    const snap = await adsCollection().orderBy('order','asc').get();
+    return snap.docs.map(d=> Object.assign({ id: d.id }, d.data()));
+  }catch(e){ console.error('adsList', e); return []; }
+}
+async function adCreate(data){
+  return adsCollection().add(Object.assign({ active: true, order: Date.now() }, data, { createdAt: Date.now() }));
+}
+async function adUpdate(id, patch){
+  return adsCollection().doc(id).update(patch);
+}
+async function adDelete(id){
+  return adsCollection().doc(id).delete();
+}
