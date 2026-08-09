@@ -431,7 +431,7 @@ const I18N = {
   uz: {
     tagline: "Dars jadvali, rejalar, eslatmalar — va oila bilan bog'lanish, bir joyda.",
     tab_bosh: "Bosh sahifa", tab_jadval: "Jadval", tab_rejalar: "Rejalar", tab_eslatma: "Eslatmalar",
-    tab_baholar: "Baholar", tab_profil: "Profil", tab_farzandlar: "Farzandlar",
+    tab_profil: "Profil", tab_farzandlar: "Farzandlar",
     tab_umumiy: "Umumiy", tab_users: "Foydalanuvchilar",
     kirish: "Kirish", royxatdan_otish: "Ro'yxatdan o'tish", chiqish: "Chiqish",
     saqlash: "Saqlash", bekor_qilish: "Bekor qilish", yangilash: "Yangilash", tahrirlash: "Tahrirlash",
@@ -454,9 +454,7 @@ const I18N = {
     err_parol_mos_emas: "Parollar bir xil emas.",
     err_parol_kamida6: "Parol kamida 6 ta belgidan iborat bo'lsin.",
     err_sorov_yuborilgan: "So'rov allaqachon yuborilgan, javobni kuting.",
-    err_fan_baho_sana: "Fan, baho va sanani kiriting.",
     err_fan_vaqt_kun: "Fan, vaqt va kamida bitta kunni tanlang.",
-    err_fan_vazifa_muddat: "Fan, vazifa va muddatni kiriting.",
     ota_ona_hisobi: "Ota-ona hisobi",
     farzand_qoshish: "Farzand qo'shish",
     farzand_qoshish_izoh: "Farzandingiz avval o'zi ro'yxatdan o'tgan bo'lishi kerak. Uning emailini kiritib so'rov yuboring, u tasdiqlagach bog'lanasiz.",
@@ -479,26 +477,21 @@ const I18N = {
     qayta_yuborish: "Qayta yuborish", yopish: "Yopish", otkazib_yuborish: "O'tkazib yuborish",
     keyingisi: "Keyingisi →", boshladik: "Boshladik! ✓",
     onboard_talaba: [
-      { emoji: '👋', title: "Xush kelibsiz!", body: "Reja — dars jadvalingizni, rejalaringizni, uy vazifalaringizni va baholaringizni bir joyda saqlashga yordam beradi." },
+      { emoji: '👋', title: "Xush kelibsiz!", body: "Reja — dars jadvalingizni, rejalaringizni va eslatmalaringizni bir joyda saqlashga yordam beradi." },
       { emoji: '📅', title: "Dars jadvalini kiriting", body: "\"Jadval\" bo'limida pastdagi + tugmasi orqali darslaringizni qo'shing — ilova darsdan oldin eslatib turadi." },
-      { emoji: '📚', title: "Uy vazifa va baholar", body: "\"Baholar\" bo'limida uy vazifalaringizni va baholaringizni kuzatib boring, muddatlar haqida eslatma olasiz." },
+      { emoji: '🗒️', title: "Reja va eslatmalar", body: "\"Rejalar\" va \"Eslatmalar\" bo'limlarida kundalik ishlaringizni rejalashtiring, muddatlar haqida eslatma olasiz." },
       { emoji: '👨‍👩‍👧', title: "Ota-onangiz bilan bog'laning", body: "Ota-onangiz sizning email manzilingiz orqali so'rov yuborishi mumkin — \"Profil\" bo'limida so'rovlarni ko'rasiz va tasdiqlaysiz." }
     ],
     onboard_ota_ona: [
-      { emoji: '👋', title: "Xush kelibsiz!", body: "Reja orqali farzandingizning dars jadvali, uy vazifalari va baholarini kuzatib borishingiz, unga reja va eslatma qo'shishingiz mumkin." },
+      { emoji: '👋', title: "Xush kelibsiz!", body: "Reja orqali farzandingizning dars jadvalini kuzatib borishingiz, unga reja va eslatma qo'shishingiz mumkin." },
       { emoji: '🔗', title: "Farzandingizni bog'lang", body: "\"Farzandlar\" bo'limida farzandingizning email manzilini kiritib, bog'lanish so'rovini yuboring. Farzandingiz tasdiqlagach, ma'lumotlari ko'rinadi." },
-      { emoji: '📊', title: "Kuzatib boring", body: "Bosh sahifada har bir farzandingiz uchun haftalik hisobotni va PDF hisobotni ko'rishingiz mumkin." }
-    ],
-    onboard_admin: [
-      { emoji: '👋', title: "Xush kelibsiz!", body: "Muassasa admin sifatida siz o'quvchilaringizga e'lonlar joylashingiz mumkin bo'ladi." },
-      { emoji: '⏳', title: "Tasdiqlashni kuting", body: "Hisobingiz hozircha tekshiruvda. Tizim egasi tasdiqlagach, e'lon joylash imkoniyati ochiladi." },
-      { emoji: '📢', title: "E'lon joylang", body: "Tasdiqlangach, \"E'lonlar\" bo'limida yangi e'lon yozib, rasm biriktirib joylashingiz mumkin — muassasangizdagi barcha o'quvchilar ko'radi." }
+      { emoji: '📊', title: "Kuzatib boring", body: "Bosh sahifada har bir farzandingiz uchun yaqin reja/eslatmalarni va PDF hisobotni ko'rishingiz mumkin." }
     ]
   },
   ru: {
     tagline: "Расписание уроков, планы, напоминания — и связь с семьёй, в одном месте.",
     tab_bosh: "Главная", tab_jadval: "Расписание", tab_rejalar: "Планы", tab_eslatma: "Напоминания",
-    tab_baholar: "Оценки", tab_profil: "Профиль", tab_farzandlar: "Дети",
+    tab_profil: "Профиль", tab_farzandlar: "Дети",
     tab_umumiy: "Обзор", tab_users: "Пользователи",
     kirish: "Войти", royxatdan_otish: "Регистрация", chiqish: "Выйти",
     saqlash: "Сохранить", bekor_qilish: "Отмена", yangilash: "Обновить", tahrirlash: "Изменить",
@@ -521,9 +514,7 @@ const I18N = {
     err_parol_mos_emas: "Пароли не совпадают.",
     err_parol_kamida6: "Пароль должен содержать минимум 6 символов.",
     err_sorov_yuborilgan: "Запрос уже отправлен, ожидайте ответа.",
-    err_fan_baho_sana: "Заполните предмет, оценку и дату.",
     err_fan_vaqt_kun: "Заполните предмет, время и хотя бы один день.",
-    err_fan_vazifa_muddat: "Заполните предмет, задание и срок.",
     ota_ona_hisobi: "Аккаунт родителя",
     farzand_qoshish: "Добавить ребёнка",
     farzand_qoshish_izoh: "Ваш ребёнок должен сначала сам зарегистрироваться. Введите его email, чтобы отправить запрос — после подтверждения вы будете связаны.",
@@ -546,26 +537,21 @@ const I18N = {
     qayta_yuborish: "Отправить снова", yopish: "Закрыть", otkazib_yuborish: "Пропустить",
     keyingisi: "Далее →", boshladik: "Начнём! ✓",
     onboard_talaba: [
-      { emoji: '👋', title: "Добро пожаловать!", body: "Reja помогает хранить расписание уроков, планы, домашние задания и оценки в одном месте." },
+      { emoji: '👋', title: "Добро пожаловать!", body: "Reja помогает хранить расписание уроков, планы и напоминания в одном месте." },
       { emoji: '📅', title: "Внесите расписание", body: "В разделе «Расписание» нажмите + внизу, чтобы добавить уроки — приложение напомнит перед началом." },
-      { emoji: '📚', title: "Домашние задания и оценки", body: "В разделе «Оценки» отслеживайте домашние задания и оценки, получайте напоминания о сроках." },
+      { emoji: '🗒️', title: "Планы и напоминания", body: "В разделах «Планы» и «Напоминания» планируйте свои дела и получайте напоминания о сроках." },
       { emoji: '👨‍👩‍👧', title: "Свяжитесь с родителями", body: "Родители могут отправить запрос по вашему email — вы увидите и подтвердите его в разделе «Профиль»." }
     ],
     onboard_ota_ona: [
-      { emoji: '👋', title: "Добро пожаловать!", body: "С Reja вы можете следить за расписанием, домашними заданиями и оценками ребёнка, добавлять планы и напоминания." },
+      { emoji: '👋', title: "Добро пожаловать!", body: "С Reja вы можете следить за расписанием ребёнка, добавлять планы и напоминания." },
       { emoji: '🔗', title: "Привяжите ребёнка", body: "В разделе «Дети» введите email ребёнка и отправьте запрос на привязку. После подтверждения появятся его данные." },
-      { emoji: '📊', title: "Следите за прогрессом", body: "На главной странице доступен недельный отчёт и PDF-отчёт по каждому ребёнку." }
-    ],
-    onboard_admin: [
-      { emoji: '👋', title: "Добро пожаловать!", body: "Как администратор учреждения вы сможете публиковать объявления для учащихся." },
-      { emoji: '⏳', title: "Ожидайте подтверждения", body: "Ваш аккаунт сейчас на проверке. После подтверждения владельцем системы откроется публикация объявлений." },
-      { emoji: '📢', title: "Публикуйте объявления", body: "После подтверждения в разделе «Объявления» вы сможете писать посты с фото — их увидят все учащиеся вашего учреждения." }
+      { emoji: '📊', title: "Следите за прогрессом", body: "На главной странице доступны ближайшие планы/напоминания и PDF-отчёт по каждому ребёнку." }
     ]
   },
   en: {
     tagline: "Class schedule, plans, reminders — and staying connected with family, all in one place.",
     tab_bosh: "Home", tab_jadval: "Schedule", tab_rejalar: "Plans", tab_eslatma: "Reminders",
-    tab_baholar: "Grades", tab_profil: "Profile", tab_farzandlar: "Children",
+    tab_profil: "Profile", tab_farzandlar: "Children",
     tab_umumiy: "Overview", tab_users: "Users",
     kirish: "Log in", royxatdan_otish: "Sign up", chiqish: "Log out",
     saqlash: "Save", bekor_qilish: "Cancel", yangilash: "Refresh", tahrirlash: "Edit",
@@ -588,9 +574,7 @@ const I18N = {
     err_parol_mos_emas: "Passwords don't match.",
     err_parol_kamida6: "Password must be at least 6 characters.",
     err_sorov_yuborilgan: "Request already sent, awaiting response.",
-    err_fan_baho_sana: "Fill in subject, grade, and date.",
     err_fan_vaqt_kun: "Fill in subject, time, and at least one day.",
-    err_fan_vazifa_muddat: "Fill in subject, task, and due date.",
     ota_ona_hisobi: "Parent account",
     farzand_qoshish: "Add child",
     farzand_qoshish_izoh: "Your child must register first. Enter their email to send a request — once they confirm, you'll be linked.",
@@ -613,20 +597,15 @@ const I18N = {
     qayta_yuborish: "Resend", yopish: "Dismiss", otkazib_yuborish: "Skip",
     keyingisi: "Next →", boshladik: "Let's go! ✓",
     onboard_talaba: [
-      { emoji: '👋', title: "Welcome!", body: "Reja helps you keep your class schedule, plans, homework, and grades all in one place." },
+      { emoji: '👋', title: "Welcome!", body: "Reja helps you keep your class schedule, plans, and reminders all in one place." },
       { emoji: '📅', title: "Add your schedule", body: "In the \"Schedule\" tab, tap + at the bottom to add classes — the app will remind you before each one." },
-      { emoji: '📚', title: "Homework and grades", body: "In the \"Grades\" tab, track your homework and grades, and get reminders about deadlines." },
+      { emoji: '🗒️', title: "Plans and reminders", body: "Use the \"Plans\" and \"Reminders\" tabs to organize your day and get notified about deadlines." },
       { emoji: '👨‍👩‍👧', title: "Connect with your parent", body: "Your parent can send a request using your email — you'll see and approve it in the \"Profile\" tab." }
     ],
     onboard_ota_ona: [
-      { emoji: '👋', title: "Welcome!", body: "With Reja you can follow your child's schedule, homework, and grades, and add plans and reminders for them." },
+      { emoji: '👋', title: "Welcome!", body: "With Reja you can follow your child's schedule, and add plans and reminders for them." },
       { emoji: '🔗', title: "Link your child", body: "In the \"Children\" tab, enter your child's email and send a link request. Once they confirm, their info will appear." },
-      { emoji: '📊', title: "Keep track", body: "On the home tab you'll find a weekly report and a PDF report for each child." }
-    ],
-    onboard_admin: [
-      { emoji: '👋', title: "Welcome!", body: "As an institution admin, you'll be able to post announcements for your students." },
-      { emoji: '⏳', title: "Wait for approval", body: "Your account is currently under review. Once the system owner approves it, posting will be unlocked." },
-      { emoji: '📢', title: "Post announcements", body: "Once approved, write posts with photos in the \"Announcements\" tab — all students at your institution will see them." }
+      { emoji: '📊', title: "Keep track", body: "On the home tab you'll find upcoming plans/reminders and a PDF report for each child." }
     ]
   }
 };
@@ -692,4 +671,24 @@ if(typeof window !== 'undefined'){
     const msg = (reason && reason.message) ? reason.message : String(reason);
     logClientError('unhandledrejection: ' + msg, reason);
   });
+}
+
+// =====================================================================
+// Bildirishnomalar (broadcasts) — tizim egasi barcha foydalanuvchilarga
+// yoki faqat bir guruhga (talaba/ota-ona) xabar yubora oladi.
+// =====================================================================
+function broadcastsCollection(){
+  return _db.collection('broadcasts');
+}
+async function broadcastCreate(data){
+  return broadcastsCollection().add(Object.assign({}, data, { createdAt: Date.now() }));
+}
+async function broadcastDelete(id){
+  return broadcastsCollection().doc(id).delete();
+}
+async function broadcastList(limit){
+  try{
+    const snap = await broadcastsCollection().orderBy('createdAt','desc').limit(limit||30).get();
+    return snap.docs.map(d=> Object.assign({ id: d.id }, d.data()));
+  }catch(e){ console.error('broadcastList', e); return []; }
 }
