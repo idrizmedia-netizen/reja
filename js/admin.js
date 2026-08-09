@@ -18,7 +18,7 @@ let state = {
   lang: 'uz',
   user: null,          // { ism, email }
   tab: 'sa_umumiy',
-  adminData: { allUsers: [], talabalar: [], otaOnalar: [], errorLogs: [], errorLogsLoaded: false, broadcasts: [], broadcastsLoaded: false },
+  adminData: { allUsers: [], talabalar: [], otaOnalar: [], errorLogs: [], errorLogsLoaded: false, broadcasts: [], broadcastsLoaded: false, ads: [], adsLoaded: false },
   toast: null
 };
 
@@ -93,9 +93,66 @@ function switchTab(t){
     loadErrorLogs().then(render);
   } else if(t==='sa_broadcast' && !state.adminData.broadcastsLoaded){
     loadBroadcasts().then(render);
+  } else if(t==='sa_ads' && !state.adminData.adsLoaded){
+    loadAds().then(render);
   } else {
     render();
   }
+}
+
+async function loadAds(){
+  state.adminData.ads = await adsList();
+  state.adminData.adsLoaded = true;
+}
+
+async function submitAdForm(e){
+  e.preventDefault();
+  const f = e.target;
+  const title = f.title.value.trim();
+  const linkUrl = f.linkUrl.value.trim();
+  const videoUrl = f.videoUrl.value.trim();
+  const errBox = document.getElementById('ad-err');
+  const progressBox = document.getElementById('ad-progress');
+  if(!title){ errBox.textContent = "Sarlavha/matnni kiriting."; return; }
+  let imageUrl = null;
+  const file = f.rasm.files[0];
+  if(file){
+    try{
+      if(progressBox) progressBox.textContent = "Rasm siqilmoqda...";
+      imageUrl = await uploadImage(file);
+    }catch(err){
+      errBox.textContent = err.message || "Rasmni qayta ishlashda xatolik.";
+      if(progressBox) progressBox.textContent = '';
+      return;
+    }
+  }
+  if(!imageUrl && !videoUrl){ errBox.textContent = "Kamida rasm yoki video havolasini kiriting."; if(progressBox) progressBox.textContent=''; return; }
+  try{
+    await adCreate({ title, linkUrl: linkUrl||null, videoUrl: videoUrl||null, imageUrl });
+  }catch(err){
+    errBox.textContent = "Saqlashda xatolik yuz berdi.";
+    if(progressBox) progressBox.textContent = '';
+    return;
+  }
+  f.reset();
+  if(progressBox) progressBox.textContent = '';
+  await loadAds();
+  render();
+  showToast("Reklama joylandi.");
+}
+
+async function toggleAdActive(id, active){
+  try{ await adUpdate(id, { active }); }catch(err){ showToast("Xatolik yuz berdi."); return; }
+  const ad = (state.adminData.ads||[]).find(a=>a.id===id);
+  if(ad) ad.active = active;
+  render();
+}
+
+async function delAd(id){
+  if(!confirm("Bu reklamani o'chirmoqchimisiz?")) return;
+  try{ await adDelete(id); }catch(err){ showToast("O'chirishda xatolik yuz berdi."); return; }
+  state.adminData.ads = (state.adminData.ads||[]).filter(a=>a.id!==id);
+  render();
 }
 
 async function loadBroadcasts(){
@@ -191,13 +248,56 @@ function renderDashboard(){
   ${state.tab==='sa_users' ? renderSAUsers() : ''}
   ${state.tab==='sa_errors' ? renderSAErrors() : ''}
   ${state.tab==='sa_broadcast' ? renderSABroadcast() : ''}
+  ${state.tab==='sa_ads' ? renderSAAds() : ''}
   <div class="tabs">
     <button class="tab ${state.tab==='sa_umumiy'?'active':''}" data-tab="sa_umumiy">${svgIcon('home')}<span>${t('tab_umumiy')}</span></button>
     <button class="tab ${state.tab==='sa_users'?'active':''}" data-tab="sa_users">${svgIcon('users')}<span>${t('tab_users')}</span></button>
     <button class="tab ${state.tab==='sa_broadcast'?'active':''}" data-tab="sa_broadcast">${svgIcon('bell')}<span>Bildirishnoma</span></button>
+    <button class="tab ${state.tab==='sa_ads'?'active':''}" data-tab="sa_ads">${svgIcon('speaker')}<span>Reklama</span></button>
     <button class="tab ${state.tab==='sa_errors'?'active':''}" data-tab="sa_errors">${svgIcon('speaker')}<span>Xatoliklar</span></button>
   </div>
   `;
+}
+
+function renderSAAds(){
+  const ads = state.adminData.ads || [];
+  return `
+  <div class="sheet sheet-plum">
+    <div class="eyebrow">Yangi reklama joylash</div>
+    <form id="adForm">
+      <label>Sarlavha / qisqa matn</label>
+      <input type="text" name="title" placeholder="Masalan: Yangi kurslar boshlandi!" required>
+      <label>Rasm (ixtiyoriy, lekin tavsiya etiladi)</label>
+      <input type="file" name="rasm" accept="image/*">
+      <label>Video havolasi (ixtiyoriy — YouTube, Vimeo yoki to'g'ridan-to'g'ri .mp4 havola)</label>
+      <input type="text" name="videoUrl" placeholder="https://youtube.com/watch?v=...">
+      <label>Bosilganda o'tadigan havola (ixtiyoriy)</label>
+      <input type="text" name="linkUrl" placeholder="https://sizning-saytingiz.uz">
+      <div id="ad-progress" class="item-meta" style="margin-top:6px;"></div>
+      <div id="ad-err" class="err"></div>
+      <button class="btn-primary" type="submit" style="margin-top:10px;">Joylash</button>
+    </form>
+  </div>
+  <div class="sheet">
+    <div class="eyebrow">Joylangan reklamalar (${ads.length})</div>
+    ${ads.length ? ads.map(a=>`
+      <div class="plan-item">
+        ${a.imageUrl?`<img src="${a.imageUrl}" style="width:100%;border-radius:8px;margin-bottom:8px;max-height:160px;object-fit:cover;">`:''}
+        <div class="item-top">
+          <div>
+            <div class="item-title">${escapeHtml(a.title||'')}</div>
+            <div class="item-meta">${a.videoUrl?'🎬 Video · ':''}${a.linkUrl?'🔗 Havola bor':'Havolasiz'}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <label style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:400;">
+              <input type="checkbox" data-ad-active="${a.id}" ${a.active!==false?'checked':''}> Faol
+            </label>
+            <button class="del" data-del-ad="${a.id}">✕</button>
+          </div>
+        </div>
+      </div>
+    `).join('') : `<div class="empty">${svgIcon('speaker')}<div>Hali reklama joylanmagan.</div></div>`}
+  </div>`;
 }
 
 function renderSABroadcast(){
@@ -331,6 +431,10 @@ function attachDashboardHandlers(){
   const bf = document.getElementById('broadcastForm');
   if(bf) bf.addEventListener('submit', sendBroadcast);
   document.querySelectorAll('[data-del-broadcast]').forEach(b=> b.addEventListener('click', ()=> delBroadcast(b.dataset.delBroadcast)));
+  const adf = document.getElementById('adForm');
+  if(adf) adf.addEventListener('submit', submitAdForm);
+  document.querySelectorAll('[data-ad-active]').forEach(cb=> cb.addEventListener('change', ()=> toggleAdActive(cb.dataset.adActive, cb.checked)));
+  document.querySelectorAll('[data-del-ad]').forEach(b=> b.addEventListener('click', ()=> delAd(b.dataset.delAd)));
 }
 
 render();
