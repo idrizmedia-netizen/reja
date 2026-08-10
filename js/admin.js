@@ -130,7 +130,8 @@ async function submitAdForm(e){
   try{
     await adCreate({ title, linkUrl: linkUrl||null, videoUrl: videoUrl||null, imageUrl });
   }catch(err){
-    errBox.textContent = "Saqlashda xatolik yuz berdi.";
+    console.error('adCreate FAILED —', (err&&err.code)||'', (err&&err.message)||err);
+    errBox.textContent = "Saqlashda xatolik yuz berdi: " + ((err&&err.code)||(err&&err.message)||'nomaʼlum xato') + " (konsolni tekshiring)";
     if(progressBox) progressBox.textContent = '';
     return;
   }
