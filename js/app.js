@@ -250,21 +250,19 @@ function videoEmbedHtml(url){
 function renderAdBanner(){
   const ads = (state.ads||[]).filter(a=> !state.dismissedAds.has(a.id));
   if(!ads.length) return '';
-  return `
-  <div class="sheet ad-banner-inline" style="padding:0;overflow:hidden;">
-    <div style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:0;">
-      ${ads.map(a=>`
-        <div style="min-width:100%;scroll-snap-align:start;position:relative;padding:14px;">
-          <button data-dismiss-ad="${a.id}" title="Yopish" style="position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,0.45);color:#fff;border:none;font-size:14px;line-height:1;cursor:pointer;z-index:2;">✕</button>
-          ${a.videoUrl ? videoEmbedHtml(a.videoUrl) : (a.imageUrl ? `<img src="${a.imageUrl}" style="width:100%;border-radius:10px;max-height:220px;object-fit:cover;display:block;">` : '')}
-          <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
-            <div class="item-title" style="font-size:13.5px;">${escapeHtml(a.title||'')}</div>
-            ${a.linkUrl ? `<a href="${escapeHtml(a.linkUrl)}" target="_blank" rel="noopener noreferrer" class="btn-small btn-plum" style="text-decoration:none;flex-shrink:0;">Ko'rish →</a>` : ''}
-          </div>
+  return ads.map(a=>`
+    <div class="sheet ad-banner-inline ad-card" style="padding:0;overflow:hidden;">
+      <div style="position:relative;">
+        <span class="ad-label">Reklama</span>
+        <button data-dismiss-ad="${a.id}" title="Yopish" class="ad-close-btn">✕</button>
+        ${a.videoUrl ? `<div class="ad-media">${videoEmbedHtml(a.videoUrl)}</div>` : (a.imageUrl ? `<img src="${a.imageUrl}" class="ad-media-img">` : '')}
+        <div class="ad-body">
+          <div class="item-title" style="font-size:14px;">${escapeHtml(a.title||'')}</div>
+          ${a.linkUrl ? `<a href="${escapeHtml(a.linkUrl)}" target="_blank" rel="noopener noreferrer" class="btn-small btn-plum ad-cta">Batafsil →</a>` : ''}
         </div>
-      `).join('')}
+      </div>
     </div>
-  </div>`;
+  `).join('');
 }
 
 // Kompyuterda (juda keng ekranda), ilova kartasidan tashqarida, chetdagi
@@ -274,10 +272,13 @@ function renderAdBanner(){
 function renderAdRailCard(a){
   return `
   <div class="ad-rail-card">
-    <button class="ad-close" data-dismiss-ad="${a.id}" title="Yopish">✕</button>
-    ${a.videoUrl ? videoEmbedHtml(a.videoUrl) : (a.imageUrl ? `<img src="${a.imageUrl}">` : '')}
-    <div class="item-title" style="font-size:13px;margin-bottom:6px;">${escapeHtml(a.title||'')}</div>
-    ${a.linkUrl ? `<a href="${escapeHtml(a.linkUrl)}" target="_blank" rel="noopener noreferrer" class="btn-small btn-plum" style="text-decoration:none;display:block;text-align:center;">Ko'rish →</a>` : ''}
+    <span class="ad-label">Reklama</span>
+    <button class="ad-close-btn" data-dismiss-ad="${a.id}" title="Yopish">✕</button>
+    ${a.videoUrl ? `<div class="ad-media">${videoEmbedHtml(a.videoUrl)}</div>` : (a.imageUrl ? `<img src="${a.imageUrl}" class="ad-media-img">` : '')}
+    <div class="ad-body">
+      <div class="item-title" style="font-size:13px;">${escapeHtml(a.title||'')}</div>
+      ${a.linkUrl ? `<a href="${escapeHtml(a.linkUrl)}" target="_blank" rel="noopener noreferrer" class="btn-small btn-plum ad-cta">Ko'rish →</a>` : ''}
+    </div>
   </div>`;
 }
 function updateAdRails(){
