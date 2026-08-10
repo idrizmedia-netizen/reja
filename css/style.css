@@ -201,3 +201,40 @@
    ko'rinishidagi tabiiy tortish (swipe) his qilinishi kifoya. */
 .sheet > div[style*="overflow-x:auto"]::-webkit-scrollbar{ display:none; }
 .sheet > div[style*="overflow-x:auto"]{ scrollbar-width:none; }
+
+/* ===== Reklama yon panellari (faqat juda keng ekranlarda, ilova
+   kartasidan tashqarida — asosiy interfeysga hech qanday xalaqit
+   bermaydi). Telefon va o'rtacha kompyuter ekranlarida butunlay
+   yashiringan, chunki joy yetarli emas. ===== */
+.ad-rail{ display:none; }
+@media (min-width: 1600px){
+  .ad-rail{
+    display:block;
+    position:fixed;
+    top:28px;
+    width:240px;
+    max-height:calc(100vh - 56px);
+    overflow-y:auto;
+  }
+  .ad-rail-left{ left:calc(50% - 800px); }
+  .ad-rail-right{ right:calc(50% - 800px); }
+  .ad-rail .sheet{ margin:0 0 16px; }
+  .ad-rail-card{
+    background:var(--paper-card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:12px;
+    margin-bottom:16px;
+    box-shadow:var(--shadow-sm);
+    position:relative;
+    animation:rejaFadeIn .25s ease both;
+  }
+  .ad-rail-card img{ width:100%; border-radius:10px; display:block; margin-bottom:8px; max-height:220px; object-fit:cover; }
+  .ad-rail-card .ad-close{ position:absolute; top:8px; right:8px; width:22px; height:22px; border-radius:50%; background:rgba(0,0,0,0.45); color:#fff; border:none; font-size:12px; line-height:1; cursor:pointer; }
+}
+
+/* Yon panellar ko'rinadigan kenglikda, ichkaridagi reklama-karuselni
+   yashiramiz — ikki marta ko'rsatmaslik uchun. */
+@media (min-width: 1600px){
+  .ad-banner-inline{ display:none; }
+}
