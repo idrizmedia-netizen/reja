@@ -704,7 +704,11 @@ async function adsList(){
   try{
     const snap = await adsCollection().orderBy('order','asc').get();
     return snap.docs.map(d=> Object.assign({ id: d.id }, d.data()));
-  }catch(e){ console.error('adsList', e); return []; }
+  }catch(e){
+    console.error('adsList FAILED —', (e&&e.code)||'', (e&&e.message)||e,
+      '— Buning eng ehtimoliy sababi: Firestore xavfsizlik qoidalarida "ads" kolleksiyasi uchun qoida hali joylanmagan/nashr qilinmagan (Publish bosilmagan).');
+    return [];
+  }
 }
 async function adCreate(data){
   return adsCollection().add(Object.assign({ active: true, order: Date.now() }, data, { createdAt: Date.now() }));
