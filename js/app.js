@@ -247,50 +247,49 @@ function videoEmbedHtml(url){
   return `<video controls style="width:100%;border-radius:10px;max-height:220px;background:#000;"><source src="${escapeHtml(url)}"></video>`;
 }
 
-function renderAdBanner(){
-  const ads = (state.ads||[]).filter(a=> !state.dismissedAds.has(a.id));
-  if(!ads.length) return '';
-  return ads.map(a=>`
-    <div class="sheet ad-banner-inline ad-card" style="padding:0;overflow:hidden;">
-      <div style="position:relative;">
-        <span class="ad-label">Reklama</span>
-        <button data-dismiss-ad="${a.id}" title="Yopish" class="ad-close-btn">✕</button>
-        ${a.videoUrl ? `<div class="ad-media">${videoEmbedHtml(a.videoUrl)}</div>` : (a.imageUrl ? `<img src="${a.imageUrl}" class="ad-media-img">` : '')}
-        <div class="ad-body">
-          <div class="item-title" style="font-size:14px;">${escapeHtml(a.title||'')}</div>
-          ${a.linkUrl ? `<a href="${escapeHtml(a.linkUrl)}" target="_blank" rel="noopener noreferrer" class="btn-small btn-plum ad-cta">Batafsil →</a>` : ''}
-        </div>
-      </div>
-    </div>
-  `).join('');
+// =====================================================================
+// Reklama — yuqorida ingichka, o'zi aylanib turadigan banner
+// (eMaktab.uz uslubida). Bitta joyda, bitta mexanizm — barcha
+// reklamalar shu banner orqali, navbat bilan (har 6 soniyada) almashib
+// ko'rsatiladi. Sahifa tarkibini pastga surmaydi, chunki balandligi
+// doimiy va kichik.
+// =====================================================================
+let _adRotateTimer = null;
+function ensureAdRotation(count){
+  if(count <= 1){ if(_adRotateTimer){ clearInterval(_adRotateTimer); _adRotateTimer = null; } return; }
+  if(_adRotateTimer) return;
+  _adRotateTimer = setInterval(()=>{
+    state.adBannerIndex = (state.adBannerIndex||0) + 1;
+    updateAdTopBanner();
+  }, 6000);
 }
-
-// Kompyuterda (juda keng ekranda), ilova kartasidan tashqarida, chetdagi
-// bo'sh oq/fon joyga chiqadigan reklama panellari. Mobil va o'rtacha
-// ekranlarda bular butunlay yashirin (CSS orqali) — asosiy interfeysga
-// hech qanday xalaqit bermaydi.
-function renderAdRailCard(a){
-  return `
-  <div class="ad-rail-card">
-    <span class="ad-label">Reklama</span>
-    <button class="ad-close-btn" data-dismiss-ad="${a.id}" title="Yopish">✕</button>
-    ${a.videoUrl ? `<div class="ad-media">${videoEmbedHtml(a.videoUrl)}</div>` : (a.imageUrl ? `<img src="${a.imageUrl}" class="ad-media-img">` : '')}
-    <div class="ad-body">
-      <div class="item-title" style="font-size:13px;">${escapeHtml(a.title||'')}</div>
-      ${a.linkUrl ? `<a href="${escapeHtml(a.linkUrl)}" target="_blank" rel="noopener noreferrer" class="btn-small btn-plum ad-cta">Ko'rish →</a>` : ''}
-    </div>
-  </div>`;
+function stopAdRotation(){
+  if(_adRotateTimer){ clearInterval(_adRotateTimer); _adRotateTimer = null; }
 }
-function updateAdRails(){
-  const left = document.getElementById('adRailLeft');
-  const right = document.getElementById('adRailRight');
-  if(!left || !right) return;
+function updateAdTopBanner(){
+  const el = document.getElementById('adTopBanner');
+  if(!el) return;
   const ads = (state.user && (state.ads||[]).filter(a=> !state.dismissedAds.has(a.id))) || [];
-  const leftAds = ads.filter((_,i)=> i%2===0);
-  const rightAds = ads.filter((_,i)=> i%2===1);
-  left.innerHTML = leftAds.map(renderAdRailCard).join('');
-  right.innerHTML = rightAds.map(renderAdRailCard).join('');
-  document.querySelectorAll('.ad-rail [data-dismiss-ad]').forEach(b=> b.addEventListener('click', ()=> dismissAd(b.dataset.dismissAd)));
+  if(!ads.length){ el.innerHTML=''; el.classList.remove('show'); stopAdRotation(); return; }
+  if(!state.adBannerIndex || state.adBannerIndex >= ads.length) state.adBannerIndex = state.adBannerIndex % ads.length || 0;
+  const a = ads[state.adBannerIndex];
+  const ctaHref = a.linkUrl || a.videoUrl || '';
+  el.classList.add('show');
+  el.innerHTML = `
+    <div class="ad-tb-inner">
+      ${a.imageUrl ? `<img src="${a.imageUrl}" class="ad-tb-thumb">` : `<span class="ad-tb-icon">${a.videoUrl?'🎬':'📢'}</span>`}
+      <div class="ad-tb-text">
+        <span class="ad-tb-label">Reklama</span>
+        <span class="ad-tb-title">${escapeHtml(a.title||'')}</span>
+      </div>
+      ${ctaHref ? `<a href="${escapeHtml(ctaHref)}" target="_blank" rel="noopener noreferrer" class="ad-tb-cta">Ko'rish →</a>` : ''}
+      <button class="ad-tb-close" data-dismiss-ad="${a.id}" title="Yopish">✕</button>
+    </div>
+    ${ads.length>1 ? `<div class="ad-tb-dots">${ads.map((_,i)=>`<span class="ad-tb-dot${i===state.adBannerIndex?' on':''}" data-ad-dot="${i}"></span>`).join('')}</div>` : ''}
+  `;
+  el.querySelectorAll('[data-dismiss-ad]').forEach(b=> b.addEventListener('click', (e)=>{ e.preventDefault(); dismissAd(b.dataset.dismissAd); }));
+  el.querySelectorAll('[data-ad-dot]').forEach(d=> d.addEventListener('click', ()=>{ state.adBannerIndex = parseInt(d.dataset.adDot,10); updateAdTopBanner(); }));
+  ensureAdRotation(ads.length);
 }
 
 async function loadParentChildren(){
@@ -583,12 +582,14 @@ function logout(){
   if(engineTimer) clearInterval(engineTimer);
   stopThreadListeners();
   stopBroadcastListener();
+  stopAdRotation();
   state.user = null;
   state.view = 'auth';
   state.authMode = 'login';
   state.parentData = { children: [], requests: [], unreadByEmail: {} };
   state.ads = [];
   state.dismissedAds = new Set();
+  state.adBannerIndex = 0;
   render();
 }
 
@@ -1164,7 +1165,7 @@ function renderSkeleton(){
 
 function render(){
   applyTheme();
-  updateAdRails();
+  updateAdTopBanner();
   const app = document.getElementById('app');
   if(state.view === 'loading'){ app.innerHTML = renderSkeleton(); return; }
   if(state.view === 'auth'){ app.innerHTML = renderAuth(); attachAuthHandlers(); return; }
@@ -1504,7 +1505,6 @@ function renderHome(){
     <p style="margin-bottom:8px;">${state.user.reminderMode==='har_dars' ? 'Har darsdan 5 daqiqa oldin eslatiladi.' : "Kuniga bir marta, ertalab bugungi darslar haqida eslatiladi."}</p>
     <button class="btn-small" id="goProfileBtn">Sozlamalarni o'zgartirish →</button>
   </div>
-  ${renderAdBanner()}
   `;
 }
 
@@ -1736,7 +1736,6 @@ function renderParentHome(){
     }).join('')}
   </div>` : ''}
   ${children.length ? `<div class="sheet"><div class="eyebrow">Tezkor</div><button class="btn-small" id="goChildrenBtn">Farzandlarni boshqarish →</button></div>` : ''}
-  ${renderAdBanner()}
   `;
 }
 
