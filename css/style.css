@@ -197,44 +197,65 @@
     .dot{ right: auto; left: 6px; top: 6px; }
   }
 
-/* Reklama karuseli — scrollbar chizig'ini yashiramiz, chunki nuqta
-   ko'rinishidagi tabiiy tortish (swipe) his qilinishi kifoya. */
-.sheet > div[style*="overflow-x:auto"]::-webkit-scrollbar{ display:none; }
-.sheet > div[style*="overflow-x:auto"]{ scrollbar-width:none; }
+/* ===== Reklama kartalari (mobil / oddiy kompyuter kengligida) =====
+   Barcha faol reklamalar bir-birining ostida, TO'LIQ ko'rinadigan holda
+   chiqadi — birini yopish boshqasini "ochib bermaydi", ular allaqachon
+   barchasi ko'rinib turibdi. */
+.ad-card{
+  border:1px solid var(--line);
+  border-radius:14px;
+  animation:rejaFadeIn .25s ease both;
+}
+.ad-label{
+  position:absolute; top:10px; left:10px; z-index:2;
+  background:rgba(0,0,0,0.55); color:#fff;
+  font-size:10px; font-weight:700; letter-spacing:.04em;
+  text-transform:uppercase; padding:3px 8px; border-radius:20px;
+  font-family:'JetBrains Mono',monospace;
+}
+.ad-close-btn{
+  position:absolute; top:8px; right:8px; z-index:2;
+  width:26px; height:26px; border-radius:50%;
+  background:rgba(0,0,0,0.5); color:#fff; border:none;
+  font-size:14px; line-height:1; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition:background-color .15s ease;
+}
+.ad-close-btn:hover{ background:rgba(0,0,0,0.75); }
+.ad-media-img{ width:100%; max-height:280px; object-fit:cover; display:block; }
+.ad-media{ line-height:0; }
+.ad-media iframe, .ad-media video{ display:block; border-radius:0; }
+.ad-body{ padding:12px 14px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.ad-cta{ text-decoration:none; flex-shrink:0; }
 
-/* ===== Reklama yon panellari (faqat juda keng ekranlarda, ilova
-   kartasidan tashqarida — asosiy interfeysga hech qanday xalaqit
-   bermaydi). Telefon va o'rtacha kompyuter ekranlarida butunlay
-   yashiringan, chunki joy yetarli emas. ===== */
+/* ===== Reklama yon panellari — kompyuterda, ilova kartasidan
+   tashqaridagi bo'sh joyda. 1440px dan boshlab (ko'pchilik noutbuk/
+   monitor kengligiga mos) ko'rinadi; torroq ekranlarda yashirin, o'rniga
+   yuqoridagi kartalar ko'rinadi. ===== */
 .ad-rail{ display:none; }
-@media (min-width: 1600px){
+@media (min-width: 1440px){
   .ad-rail{
     display:block;
     position:fixed;
     top:28px;
-    width:240px;
+    width:210px;
     max-height:calc(100vh - 56px);
     overflow-y:auto;
   }
-  .ad-rail-left{ left:calc(50% - 800px); }
-  .ad-rail-right{ right:calc(50% - 800px); }
-  .ad-rail .sheet{ margin:0 0 16px; }
+  .ad-rail-left{ left:max(12px, calc(50% - 770px)); }
+  .ad-rail-right{ right:max(12px, calc(50% - 770px)); }
   .ad-rail-card{
     background:var(--paper-card);
     border:1px solid var(--line);
     border-radius:14px;
-    padding:12px;
+    overflow:hidden;
     margin-bottom:16px;
     box-shadow:var(--shadow-sm);
     position:relative;
     animation:rejaFadeIn .25s ease both;
   }
-  .ad-rail-card img{ width:100%; border-radius:10px; display:block; margin-bottom:8px; max-height:220px; object-fit:cover; }
-  .ad-rail-card .ad-close{ position:absolute; top:8px; right:8px; width:22px; height:22px; border-radius:50%; background:rgba(0,0,0,0.45); color:#fff; border:none; font-size:12px; line-height:1; cursor:pointer; }
-}
-
-/* Yon panellar ko'rinadigan kenglikda, ichkaridagi reklama-karuselni
-   yashiramiz — ikki marta ko'rsatmaslik uchun. */
-@media (min-width: 1600px){
+  .ad-rail-card .ad-body{ padding:10px 12px; flex-direction:column; align-items:stretch; gap:8px; }
+  .ad-rail-card .ad-media-img{ max-height:180px; }
+  .ad-rail-card .ad-cta{ text-align:center; }
   .ad-banner-inline{ display:none; }
 }
