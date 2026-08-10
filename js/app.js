@@ -251,7 +251,7 @@ function renderAdBanner(){
   const ads = (state.ads||[]).filter(a=> !state.dismissedAds.has(a.id));
   if(!ads.length) return '';
   return `
-  <div class="sheet" style="padding:0;overflow:hidden;">
+  <div class="sheet ad-banner-inline" style="padding:0;overflow:hidden;">
     <div style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:0;">
       ${ads.map(a=>`
         <div style="min-width:100%;scroll-snap-align:start;position:relative;padding:14px;">
@@ -265,6 +265,31 @@ function renderAdBanner(){
       `).join('')}
     </div>
   </div>`;
+}
+
+// Kompyuterda (juda keng ekranda), ilova kartasidan tashqarida, chetdagi
+// bo'sh oq/fon joyga chiqadigan reklama panellari. Mobil va o'rtacha
+// ekranlarda bular butunlay yashirin (CSS orqali) — asosiy interfeysga
+// hech qanday xalaqit bermaydi.
+function renderAdRailCard(a){
+  return `
+  <div class="ad-rail-card">
+    <button class="ad-close" data-dismiss-ad="${a.id}" title="Yopish">✕</button>
+    ${a.videoUrl ? videoEmbedHtml(a.videoUrl) : (a.imageUrl ? `<img src="${a.imageUrl}">` : '')}
+    <div class="item-title" style="font-size:13px;margin-bottom:6px;">${escapeHtml(a.title||'')}</div>
+    ${a.linkUrl ? `<a href="${escapeHtml(a.linkUrl)}" target="_blank" rel="noopener noreferrer" class="btn-small btn-plum" style="text-decoration:none;display:block;text-align:center;">Ko'rish →</a>` : ''}
+  </div>`;
+}
+function updateAdRails(){
+  const left = document.getElementById('adRailLeft');
+  const right = document.getElementById('adRailRight');
+  if(!left || !right) return;
+  const ads = (state.user && (state.ads||[]).filter(a=> !state.dismissedAds.has(a.id))) || [];
+  const leftAds = ads.filter((_,i)=> i%2===0);
+  const rightAds = ads.filter((_,i)=> i%2===1);
+  left.innerHTML = leftAds.map(renderAdRailCard).join('');
+  right.innerHTML = rightAds.map(renderAdRailCard).join('');
+  document.querySelectorAll('.ad-rail [data-dismiss-ad]').forEach(b=> b.addEventListener('click', ()=> dismissAd(b.dataset.dismissAd)));
 }
 
 async function loadParentChildren(){
@@ -1138,6 +1163,7 @@ function renderSkeleton(){
 
 function render(){
   applyTheme();
+  updateAdRails();
   const app = document.getElementById('app');
   if(state.view === 'loading'){ app.innerHTML = renderSkeleton(); return; }
   if(state.view === 'auth'){ app.innerHTML = renderAuth(); attachAuthHandlers(); return; }
