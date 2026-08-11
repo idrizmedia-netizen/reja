@@ -111,9 +111,12 @@ async function submitAdForm(e){
   const title = f.title.value.trim();
   const linkUrl = f.linkUrl.value.trim();
   const videoUrl = f.videoUrl.value.trim();
+  const startDate = f.startDate.value || null;
+  const endDate = f.endDate.value || null;
   const errBox = document.getElementById('ad-err');
   const progressBox = document.getElementById('ad-progress');
   if(!title){ errBox.textContent = "Sarlavha/matnni kiriting."; return; }
+  if(startDate && endDate && startDate > endDate){ errBox.textContent = "Tugash sanasi boshlanish sanasidan oldin bo'lishi mumkin emas."; return; }
   let imageUrl = null;
   const file = f.rasm.files[0];
   if(file){
@@ -128,7 +131,7 @@ async function submitAdForm(e){
   }
   if(!imageUrl && !videoUrl){ errBox.textContent = "Kamida rasm yoki video havolasini kiriting."; if(progressBox) progressBox.textContent=''; return; }
   try{
-    await adCreate({ title, linkUrl: linkUrl||null, videoUrl: videoUrl||null, imageUrl });
+    await adCreate({ title, linkUrl: linkUrl||null, videoUrl: videoUrl||null, imageUrl, startDate, endDate });
   }catch(err){
     console.error('adCreate FAILED —', (err&&err.code)||'', (err&&err.message)||err);
     errBox.textContent = "Saqlashda xatolik yuz berdi: " + ((err&&err.code)||(err&&err.message)||'nomaʼlum xato') + " (konsolni tekshiring)";
@@ -262,6 +265,7 @@ function renderDashboard(){
 
 function renderSAAds(){
   const ads = state.adminData.ads || [];
+  const today = todayISO();
   return `
   <div class="sheet sheet-plum">
     <div class="eyebrow">Yangi reklama joylash</div>
@@ -274,6 +278,17 @@ function renderSAAds(){
       <input type="text" name="videoUrl" placeholder="https://youtube.com/watch?v=...">
       <label>Bosilganda o'tadigan havola (ixtiyoriy)</label>
       <input type="text" name="linkUrl" placeholder="https://sizning-saytingiz.uz">
+      <div style="display:flex;gap:10px;">
+        <div style="flex:1;">
+          <label>Boshlanish sanasi (ixtiyoriy)</label>
+          <input type="date" name="startDate">
+        </div>
+        <div style="flex:1;">
+          <label>Tugash sanasi (ixtiyoriy)</label>
+          <input type="date" name="endDate">
+        </div>
+      </div>
+      <div class="note" style="margin-top:-6px;">Sana kiritilmasa, reklama muddatsiz (siz o'chirmaguningizcha) ko'rinadi.</div>
       <div id="ad-progress" class="item-meta" style="margin-top:6px;"></div>
       <div id="ad-err" class="err"></div>
       <button class="btn-primary" type="submit" style="margin-top:10px;">Joylash</button>
@@ -281,13 +296,18 @@ function renderSAAds(){
   </div>
   <div class="sheet">
     <div class="eyebrow">Joylangan reklamalar (${ads.length})</div>
-    ${ads.length ? ads.map(a=>`
+    ${ads.length ? ads.map(a=>{
+      const scheduleNote = (a.startDate || a.endDate)
+        ? `${a.startDate||'...'} — ${a.endDate||'...'}${(a.endDate && a.endDate<today)?' (muddati tugagan)':((a.startDate && a.startDate>today)?' (hali boshlanmagan)':' (faol muddatda)')}`
+        : "Muddatsiz";
+      return `
       <div class="plan-item">
         ${a.imageUrl?`<img src="${a.imageUrl}" style="width:100%;border-radius:8px;margin-bottom:8px;max-height:160px;object-fit:cover;">`:''}
         <div class="item-top">
           <div>
             <div class="item-title">${escapeHtml(a.title||'')}</div>
-            <div class="item-meta">${a.videoUrl?'🎬 Video · ':''}${a.linkUrl?'🔗 Havola bor':'Havolasiz'}</div>
+            <div class="item-meta">${a.videoUrl?'🎬 Video · ':''}${a.linkUrl?'🔗 Havola bor · ':''}👁 ${a.views||0} ko'rish · 👆 ${a.clicks||0} bosish</div>
+            <div class="item-meta">📅 ${scheduleNote}</div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
             <label style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:400;">
@@ -297,7 +317,7 @@ function renderSAAds(){
           </div>
         </div>
       </div>
-    `).join('') : `<div class="empty">${svgIcon('speaker')}<div>Hali reklama joylanmagan.</div></div>`}
+    `;}).join('') : `<div class="empty">${svgIcon('speaker')}<div>Hali reklama joylanmagan.</div></div>`}
   </div>`;
 }
 
