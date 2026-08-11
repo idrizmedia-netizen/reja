@@ -104,6 +104,7 @@ async function loginAs(acc){
   state.tab = defaultTab();
   if(acc.onboarded !== true){ state.showOnboarding = true; state.onboardStep = 0; }
   render();
+  if(acc.role === 'talaba') checkAchievements();
   startEngine();
 }
 
@@ -222,7 +223,12 @@ async function markBroadcastsRead(){
 async function loadAdsForUser(){
   try{
     const all = await adsList();
-    state.ads = all.filter(a=> a.active !== false);
+    const today = todayISO();
+    state.ads = all.filter(a=>
+      a.active !== false &&
+      (!a.startDate || a.startDate <= today) &&
+      (!a.endDate || a.endDate >= today)
+    );
     render();
   }catch(e){ console.error('loadAdsForUser', e); }
 }
@@ -282,13 +288,22 @@ function updateAdTopBanner(){
         <span class="ad-tb-label">Reklama</span>
         <span class="ad-tb-title">${escapeHtml(a.title||'')}</span>
       </div>
-      ${ctaHref ? `<a href="${escapeHtml(ctaHref)}" target="_blank" rel="noopener noreferrer" class="ad-tb-cta">Ko'rish →</a>` : ''}
+      ${ctaHref ? `<a href="${escapeHtml(ctaHref)}" target="_blank" rel="noopener noreferrer" class="ad-tb-cta" data-ad-click="${a.id}">Ko'rish →</a>` : ''}
       <button class="ad-tb-close" data-dismiss-ad="${a.id}" title="Yopish">✕</button>
     </div>
     ${ads.length>1 ? `<div class="ad-tb-dots">${ads.map((_,i)=>`<span class="ad-tb-dot${i===state.adBannerIndex?' on':''}" data-ad-dot="${i}"></span>`).join('')}</div>` : ''}
   `;
   el.querySelectorAll('[data-dismiss-ad]').forEach(b=> b.addEventListener('click', (e)=>{ e.preventDefault(); dismissAd(b.dataset.dismissAd); }));
   el.querySelectorAll('[data-ad-dot]').forEach(d=> d.addEventListener('click', ()=>{ state.adBannerIndex = parseInt(d.dataset.adDot,10); updateAdTopBanner(); }));
+  el.querySelectorAll('[data-ad-click]').forEach(link=> link.addEventListener('click', ()=> adTrackClick(link.dataset.adClick)));
+  // Ko'rishlar soni — faqat shu reklama YANGI ko'rsatilganda bir marta
+  // hisoblanadi (har bir qayta render()da emas, aks holda son sun'iy
+  // tez o'sib ketardi).
+  if(!state.trackedAdViews) state.trackedAdViews = new Set();
+  if(!state.trackedAdViews.has(a.id)){
+    state.trackedAdViews.add(a.id);
+    adTrackView(a.id);
+  }
   ensureAdRotation(ads.length);
 }
 
@@ -601,6 +616,43 @@ function closeModal(){ state.modal = null; render(); }
 
 function toggleDowChip(el){ el.classList.toggle('on'); }
 
+// =====================================================================
+// Yutuq/nishonlar tizimi (talaba uchun) — kichik motivatsion belgilar,
+// muayyan ishni birinchi marta bajarganda avtomatik "ochiladi".
+// =====================================================================
+const ACHIEVEMENTS = {
+  first_lesson: { emoji: '🎒', title: 'Birinchi dars', desc: "Dars jadvaliga birinchi darsni qo'shdingiz." },
+  full_week: { emoji: '📅', title: "To'liq hafta", desc: "Kamida 5 xil kunga dars kiritdingiz." },
+  planner_5: { emoji: '🗒️', title: 'Rejachi', desc: "5 ta reja qo'shdingiz." },
+  reminder_5: { emoji: '⏰', title: 'Eslatuvchi', desc: "5 ta eslatma qo'shdingiz." },
+  linked_parent: { emoji: '👨‍👩‍👧', title: 'Oila bilan', desc: "Ota-onangiz bilan bog'landingiz." }
+};
+function checkAchievements(){
+  if(!state.user || state.user.role !== 'talaba') return;
+  if(!state.user.achievements) state.user.achievements = [];
+  if(!state.user.stats) state.user.stats = { plansAdded: 0, remindersAdded: 0 };
+  const has = (k)=> state.user.achievements.includes(k);
+  const newly = [];
+  const unlock = (k)=>{ if(!has(k)){ state.user.achievements.push(k); newly.push(k); } };
+
+  if(state.data.schedule.length >= 1) unlock('first_lesson');
+  const uniqueDays = new Set();
+  state.data.schedule.forEach(l=> (l.kunlar||[]).forEach(d=>uniqueDays.add(d)));
+  if(uniqueDays.size >= 5) unlock('full_week');
+  if((state.user.stats.plansAdded||0) >= 5) unlock('planner_5');
+  if((state.user.stats.remindersAdded||0) >= 5) unlock('reminder_5');
+  if((state.parentData.linkedParents||[]).length >= 1) unlock('linked_parent');
+
+  if(newly.length){
+    sSet('account:'+sanitizeKey(state.user.email), state.user).catch(()=>{});
+    newly.forEach(k=>{
+      const ach = ACHIEVEMENTS[k];
+      if(ach) fireNotif(ach.emoji+' Yangi nishon!', ach.title+' — '+ach.desc);
+    });
+    render();
+  }
+}
+
 async function addLesson(e){
   e.preventDefault();
   const f = e.target;
@@ -621,6 +673,7 @@ async function addLesson(e){
   await saveSchedule();
   closeModal();
   showToast(editId ? "Dars yangilandi." : "Dars jadvalga qo'shildi.");
+  checkAchievements();
 }
 
 async function delLesson(id){
@@ -642,11 +695,14 @@ async function addPlan(e){
     if(p){ Object.assign(p, { turi, nom, sana, izoh }); }
   } else {
     state.data.plans.push({ id: uid(), turi, nom, sana, izoh });
+    state.user.stats = state.user.stats || { plansAdded: 0, remindersAdded: 0 };
+    state.user.stats.plansAdded = (state.user.stats.plansAdded||0) + 1;
   }
   state.data.plans.sort((a,b)=> a.sana.localeCompare(b.sana));
   await savePlans();
   closeModal();
   showToast(editId ? "Reja yangilandi." : "Reja qo'shildi.");
+  checkAchievements();
 }
 
 async function delPlan(id){
@@ -668,11 +724,14 @@ async function addReminder(e){
     if(r){ Object.assign(r, { matn, sana, vaqt, takrorlanish }); }
   } else {
     state.data.reminders.push({ id: uid(), matn, sana, vaqt, takrorlanish });
+    state.user.stats = state.user.stats || { plansAdded: 0, remindersAdded: 0 };
+    state.user.stats.remindersAdded = (state.user.stats.remindersAdded||0) + 1;
   }
   state.data.reminders.sort((a,b)=> (a.sana+a.vaqt).localeCompare(b.sana+b.vaqt));
   await saveReminders();
   closeModal();
   showToast(editId ? "Eslatma yangilandi." : "Eslatma qo'yildi.");
+  checkAchievements();
 }
 
 async function delReminder(id){
@@ -1029,6 +1088,7 @@ async function respondLinkRequest(parentKey, accept){
   startThreadListeners(state.parentData.linkedParents, 'child');
   render();
   showToast(accept ? "Bog'landingiz." : "So'rov rad etildi.");
+  if(accept) checkAchievements();
 }
 
 async function parentAddPlan(e){
@@ -1617,6 +1677,19 @@ function renderProfile(){
       ${u.viloyat ? `<p style="margin-top:-10px;">${escapeHtml(u.viloyat)}${u.tuman?', '+escapeHtml(u.tuman):''}</p>` : ''}
       <button class="btn-small" id="editProfileBtn">✎ Profilni tahrirlash</button>
       ${u.authProvider==='google' ? `<button class="btn-small btn-plum" id="setPasswordBtn" style="margin-left:6px;">🔑 Parol o'rnatish</button>` : ''}
+    </div>
+    <div class="sheet sheet-plum">
+      <div class="eyebrow">Nishonlarim (${(u.achievements||[]).length}/${Object.keys(ACHIEVEMENTS).length})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;">
+        ${Object.entries(ACHIEVEMENTS).map(([key,ach])=>{
+          const unlocked = (u.achievements||[]).includes(key);
+          return `
+          <div title="${escapeHtml(ach.desc)}" style="width:78px;text-align:center;opacity:${unlocked?'1':'0.35'};">
+            <div style="font-size:28px;line-height:1;margin-bottom:4px;filter:${unlocked?'none':'grayscale(1)'};">${ach.emoji}</div>
+            <div style="font-size:10.5px;font-weight:600;">${escapeHtml(ach.title)}</div>
+          </div>`;
+        }).join('')}
+      </div>
     </div>
     ${reqs.length ? `
     <div class="sheet sheet-plum">
