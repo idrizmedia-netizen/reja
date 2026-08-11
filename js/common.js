@@ -711,11 +711,22 @@ async function adsList(){
   }
 }
 async function adCreate(data){
-  return adsCollection().add(Object.assign({ active: true, order: Date.now() }, data, { createdAt: Date.now() }));
+  return adsCollection().add(Object.assign({ active: true, order: Date.now(), views: 0, clicks: 0 }, data, { createdAt: Date.now() }));
 }
 async function adUpdate(id, patch){
   return adsCollection().doc(id).update(patch);
 }
 async function adDelete(id){
   return adsCollection().doc(id).delete();
+}
+// Reklama ko'rilganda/bosilganda hisoblagichni bittaga oshiradi
+// (Firestore'ning atomik increment() funksiyasi orqali — bir vaqtning
+// o'zida bir nechta foydalanuvchi ko'rsa ham, hisob to'g'ri qo'shiladi).
+async function adTrackView(id){
+  try{ await adsCollection().doc(id).update({ views: firebase.firestore.FieldValue.increment(1) }); }
+  catch(e){ /* statistikadagi kichik xatolik jiddiy emas, indamaymiz */ }
+}
+async function adTrackClick(id){
+  try{ await adsCollection().doc(id).update({ clicks: firebase.firestore.FieldValue.increment(1) }); }
+  catch(e){ /* statistikadagi kichik xatolik jiddiy emas, indamaymiz */ }
 }
