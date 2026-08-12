@@ -730,3 +730,26 @@ async function adTrackClick(id){
   try{ await adsCollection().doc(id).update({ clicks: firebase.firestore.FieldValue.increment(1) }); }
   catch(e){ /* statistikadagi kichik xatolik jiddiy emas, indamaymiz */ }
 }
+
+// =====================================================================
+// Joylashuv (location) — talaba o'zi yoqsa, so'nggi joylashuvi
+// Firestore'ga yoziladi; faqat unga bog'langan ota-ona ko'ra oladi.
+// =====================================================================
+function locationDoc(studentKey){
+  return _db.collection('locations').doc(studentKey);
+}
+async function locationSet(studentKey, lat, lng, accuracy){
+  try{
+    await locationDoc(studentKey).set({ lat, lng, accuracy: accuracy||null, updatedAt: Date.now() });
+    return true;
+  }catch(e){ console.error('locationSet', e); return false; }
+}
+async function locationClear(studentKey){
+  try{ await locationDoc(studentKey).delete(); }catch(e){ /* muhim emas */ }
+}
+async function locationGet(studentKey){
+  try{
+    const doc = await locationDoc(studentKey).get();
+    return doc.exists ? doc.data() : null;
+  }catch(e){ console.error('locationGet', e); return null; }
+}
