@@ -104,7 +104,10 @@ async function loginAs(acc){
   state.tab = defaultTab();
   if(acc.onboarded !== true){ state.showOnboarding = true; state.onboardStep = 0; }
   render();
-  if(acc.role === 'talaba') checkAchievements();
+  if(acc.role === 'talaba'){
+    checkAchievements();
+    if(acc.shareLocation) startLocationSharing();
+  }
   startEngine();
 }
 
@@ -271,6 +274,53 @@ function ensureAdRotation(count){
 }
 function stopAdRotation(){
   if(_adRotateTimer){ clearInterval(_adRotateTimer); _adRotateTimer = null; }
+}
+
+// =====================================================================
+// Joylashuvni ulashish (talaba tomonida) — FAQAT talabaning o'zi
+// yoqqanda ishlaydi. Har ~50 soniyada brauzerdan joriy joylashuvni
+// so'raymiz va Firestore'ga yozamiz (doimiy watchPosition o'rniga
+// vaqti-vaqti bilan so'rash — batareyani tejaydi va yozuvlar sonini
+// kamaytiradi).
+// =====================================================================
+let _locationTimer = null;
+function startLocationSharing(){
+  if(_locationTimer) return;
+  if(!navigator.geolocation){ showToast("Bu qurilma/brauzer joylashuvni aniqlay olmaydi."); return; }
+  const studentKey = sanitizeKey(state.user.email);
+  const updateOnce = ()=>{
+    navigator.geolocation.getCurrentPosition(
+      async (pos)=>{
+        await locationSet(studentKey, pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+        const st = document.getElementById('locStatusText');
+        if(st) st.textContent = "So'nggi yuborilgan: " + new Date().toLocaleTimeString('uz-UZ');
+      },
+      (err)=>{
+        console.error('geolocation', err);
+        const st = document.getElementById('locStatusText');
+        if(st) st.textContent = "Joylashuvni aniqlab bo'lmadi (ruxsat berilmagan bo'lishi mumkin).";
+      },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 30000 }
+    );
+  };
+  updateOnce();
+  _locationTimer = setInterval(updateOnce, 50000);
+}
+function stopLocationSharing(){
+  if(_locationTimer){ clearInterval(_locationTimer); _locationTimer = null; }
+}
+async function toggleLocationShare(){
+  state.user.shareLocation = !state.user.shareLocation;
+  render();
+  await sSet('account:'+sanitizeKey(state.user.email), state.user);
+  if(state.user.shareLocation){
+    startLocationSharing();
+    showToast("Joylashuvni ulashish yoqildi.");
+  } else {
+    stopLocationSharing();
+    await locationClear(sanitizeKey(state.user.email));
+    showToast("Joylashuvni ulashish o'chirildi.");
+  }
 }
 function updateAdTopBanner(){
   const el = document.getElementById('adTopBanner');
@@ -598,6 +648,7 @@ function logout(){
   stopThreadListeners();
   stopBroadcastListener();
   stopAdRotation();
+  stopLocationSharing();
   state.user = null;
   state.view = 'auth';
   state.authMode = 'login';
@@ -613,6 +664,32 @@ function switchTab(t){ state.tab = t; state.modal = null; render(); }
 function openModal(kind, extra){ state.modal = Object.assign({ kind }, extra||{}); render(); }
 
 function closeModal(){ state.modal = null; render(); }
+
+async function openLocationModal(email, name){
+  openModal('viewLocation', { childEmail: email, childName: name });
+  const studentKey = sanitizeKey(email);
+  const loc = await locationGet(studentKey);
+  const statusEl = document.getElementById('locMapStatus');
+  const mapEl = document.getElementById('locMapEl');
+  if(!statusEl || !mapEl || !state.modal || state.modal.kind !== 'viewLocation') return; // modal shu orada yopilgan bo'lishi mumkin
+  if(!loc){
+    statusEl.textContent = "Hozircha joylashuv ma'lumoti yo'q — farzandingiz ilovani ochib, joylashuvni hali yubormagan bo'lishi mumkin.";
+    return;
+  }
+  const ageMin = Math.round((Date.now()-loc.updatedAt)/60000);
+  statusEl.textContent = "So'nggi yangilanish: " + (ageMin<1 ? 'hozirgina' : ageMin+' daqiqa oldin');
+  if(window.L){
+    try{
+      const map = L.map(mapEl).setView([loc.lat, loc.lng], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+        maxZoom: 19
+      }).addTo(map);
+      L.marker([loc.lat, loc.lng]).addTo(map).bindPopup(escapeHtml(name)).openPopup();
+      setTimeout(()=> map.invalidateSize(), 120);
+    }catch(e){ console.error('map init', e); }
+  }
+}
 
 function toggleDowChip(el){ el.classList.toggle('on'); }
 
@@ -1731,6 +1808,12 @@ function renderProfile(){
       <button class="btn-small" id="soundToggleBtn" style="margin-left:6px;">${u.soundOff ? '🔇 Ovoz o\'chiq' : '🔔 Ovoz yoniq'}</button>
     </div>
     <div class="sheet">
+      <div class="eyebrow">📍 Joylashuv</div>
+      <p class="item-meta" style="margin-bottom:8px;">Yoqsangiz, bog'langan ota-onangiz sizning so'nggi joylashuvingizni xaritada ko'ra oladi. Bu — SIZNING tanlovingiz, istalgan payt o'chirib qo'yishingiz mumkin, va o'chirilganda ota-ona hech narsani ko'rmaydi.</p>
+      <button class="btn-small ${u.shareLocation?'btn-plum':''}" id="locShareBtn">${u.shareLocation ? '📍 Ulashish yoniq — o\'chirish' : "📍 Joylashuvni ulashishni yoqish"}</button>
+      ${u.shareLocation ? `<div class="item-meta" style="margin-top:6px;" id="locStatusText">Joylashuv aniqlanmoqda...</div>` : ''}
+    </div>
+    <div class="sheet">
       <div class="eyebrow">Ma'lumotlarim</div>
       <p class="item-meta" style="margin-bottom:8px;">Jadval, rejalar va eslatmalaringizni bitta faylga zaxira sifatida yuklab oling.</p>
       <button class="btn-small" id="backupBtn">⬇ Zaxira nusxa (JSON)</button>
@@ -1789,7 +1872,10 @@ function renderParentHome(){
           </div>
         </div>
         ${lessons.length ? `<div class="item-meta">Bugun ${lessons.length} ta dars: ${lessons.map(l=>l.boshlanish+' '+l.fan).join(', ')}</div>` : `<div class="item-meta">Bugun dars kiritilmagan.</div>`}
-        <button class="btn-small" data-pdf-report="${escapeHtml(c.email)}" style="margin-top:8px;">⬇ ${t('pdf_hisobot')}</button>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <button class="btn-small" data-pdf-report="${escapeHtml(c.email)}">⬇ ${t('pdf_hisobot')}</button>
+          ${c.acc.shareLocation ? `<button class="btn-small btn-plum" data-view-location="${escapeHtml(c.email)}|${escapeHtml(c.acc.ism)}">📍 Joylashuvi</button>` : ''}
+        </div>
       </div>`;
     }).join('') : `<div class="empty">${svgIcon('users')}<div>Hali farzand bog'lanmagan. Profil orqali qo'shing.</div></div>`}
   </div>
@@ -1836,6 +1922,7 @@ function renderParentChildren(){
           ${(c.acc.viloyat || c.acc.tuman) ? `<div class="item-meta">${escapeHtml(c.acc.viloyat||'')}${c.acc.tuman?', '+escapeHtml(c.acc.tuman):''}</div>` : ''}
         </div>
         <button class="btn-small" data-chat-child="${escapeHtml(c.email)}|${escapeHtml(c.acc.ism)}">${svgIcon('chat')}${unread?` <span class="badge unread">${unread}</span>`:''}</button>
+        ${c.acc.shareLocation ? `<button class="btn-small btn-plum" data-view-location="${escapeHtml(c.email)}|${escapeHtml(c.acc.ism)}" style="margin-left:6px;">📍</button>` : ''}
       </div>
       <div class="eyebrow">Yaqin rejalar va eslatmalar</div>
       ${(upcomingPlans.length||upcomingRems.length) ? `
@@ -1872,6 +1959,16 @@ function renderParentChildren(){
 
 function renderModal(){
   const k = state.modal.kind;
+  if(k==='viewLocation'){
+    return `
+  <div class="modal-wrap" id="modalWrap">
+    <div class="modal">
+      <div class="modal-head"><h3>${escapeHtml(state.modal.childName||'')} — joylashuvi</h3><button class="close-x" id="modalClose">✕</button></div>
+      <div id="locMapStatus" class="item-meta" style="margin-bottom:8px;">Yuklanmoqda...</div>
+      <div id="locMapEl" style="width:100%;height:320px;border-radius:12px;overflow:hidden;background:var(--line);"></div>
+    </div>
+  </div>`;
+  }
   if(k==='notifications'){
     const partnerNames = state.parentData.partnerNames || {};
     const unreadChats = Object.entries(state.parentData.unreadByEmail||{}).filter(([,n])=>n>0);
@@ -2174,6 +2271,10 @@ function attachAppHandlers(){
   const gc = document.getElementById('goChildrenBtn');
   if(gc) gc.addEventListener('click', ()=> switchTab('p_farzandlar'));
   document.querySelectorAll('[data-pdf-report]').forEach(b=> b.addEventListener('click', ()=> exportChildPDF(b.dataset.pdfReport)));
+  document.querySelectorAll('[data-view-location]').forEach(b=> b.addEventListener('click', ()=>{
+    const [email,name] = b.dataset.viewLocation.split('|');
+    openLocationModal(email, name);
+  }));
   const lb = document.getElementById('logoutBtn');
   if(lb) lb.addEventListener('click', logout);
   const flb = document.getElementById('fallbackLogoutBtn');
@@ -2195,6 +2296,8 @@ function attachAppHandlers(){
     render();
     await sSet('account:'+sanitizeKey(state.user.email), state.user);
   });
+  const lsb = document.getElementById('locShareBtn');
+  if(lsb) lsb.addEventListener('click', toggleLocationShare);
   const acb2 = document.getElementById('addChildBtn2');
   if(acb2) acb2.addEventListener('click', ()=> openModal('addChild'));
 
