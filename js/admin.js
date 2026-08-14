@@ -18,7 +18,7 @@ let state = {
   lang: 'uz',
   user: null,          // { ism, email }
   tab: 'sa_umumiy',
-  adminData: { allUsers: [], talabalar: [], otaOnalar: [], errorLogs: [], errorLogsLoaded: false, broadcasts: [], broadcastsLoaded: false, ads: [], adsLoaded: false },
+  adminData: { allUsers: [], talabalar: [], otaOnalar: [], errorLogs: [], errorLogsLoaded: false, broadcasts: [], broadcastsLoaded: false, ads: [], adsLoaded: false, supportChats: [], openSupportEmail: null },
   toast: null
 };
 
@@ -95,9 +95,33 @@ function switchTab(t){
     loadBroadcasts().then(render);
   } else if(t==='sa_ads' && !state.adminData.adsLoaded){
     loadAds().then(render);
+  } else if(t==='sa_support'){
+    loadSupportChats().then(render);
   } else {
     render();
   }
+}
+
+async function loadSupportChats(){
+  state.adminData.supportChats = await supportChatListAll();
+}
+
+async function sendSupportReply(userEmail){
+  const input = document.getElementById('supportReplyInput');
+  if(!input) return;
+  const matn = input.value.trim();
+  if(!matn) return;
+  const thread = (state.adminData.supportChats.find(c=>c.userEmail===userEmail)||{}).messages || [];
+  thread.push({ id: uid(), from: 'admin', matn, ts: Date.now() });
+  const saved = await supportChatSend(userEmail, thread);
+  if(!saved){ showToast("Xabar yuborilmadi."); return; }
+  const conv = state.adminData.supportChats.find(c=>c.userEmail===userEmail);
+  if(conv) conv.messages = thread;
+  render();
+  setTimeout(()=>{
+    const cl = document.getElementById('supportThreadList');
+    if(cl) cl.scrollTop = cl.scrollHeight;
+  }, 30);
 }
 
 async function loadAds(){
@@ -253,14 +277,57 @@ function renderDashboard(){
   ${state.tab==='sa_errors' ? renderSAErrors() : ''}
   ${state.tab==='sa_broadcast' ? renderSABroadcast() : ''}
   ${state.tab==='sa_ads' ? renderSAAds() : ''}
+  ${state.tab==='sa_support' ? renderSASupport() : ''}
   <div class="tabs">
     <button class="tab ${state.tab==='sa_umumiy'?'active':''}" data-tab="sa_umumiy">${svgIcon('home')}<span>${t('tab_umumiy')}</span></button>
     <button class="tab ${state.tab==='sa_users'?'active':''}" data-tab="sa_users">${svgIcon('users')}<span>${t('tab_users')}</span></button>
     <button class="tab ${state.tab==='sa_broadcast'?'active':''}" data-tab="sa_broadcast">${svgIcon('bell')}<span>Bildirishnoma</span></button>
     <button class="tab ${state.tab==='sa_ads'?'active':''}" data-tab="sa_ads">${svgIcon('speaker')}<span>Reklama</span></button>
+    <button class="tab ${state.tab==='sa_support'?'active':''}" data-tab="sa_support">${svgIcon('chat')}<span>Yordam</span></button>
     <button class="tab ${state.tab==='sa_errors'?'active':''}" data-tab="sa_errors">${svgIcon('speaker')}<span>Xatoliklar</span></button>
   </div>
   `;
+}
+
+function renderSASupport(){
+  const chats = state.adminData.supportChats || [];
+  const openEmail = state.adminData.openSupportEmail;
+  if(openEmail){
+    const conv = chats.find(c=>c.userEmail===sanitizeKey(openEmail)) || chats.find(c=>c.userEmail===openEmail);
+    const thread = (conv && conv.messages) || [];
+    return `
+    <div class="sheet">
+      <button class="btn-small" id="backToSupportListBtn" style="margin-bottom:10px;">← Ro'yxatga qaytish</button>
+      <div class="eyebrow">${escapeHtml(openEmail)}</div>
+      <div class="chat-list" id="supportThreadList">
+        ${thread.length ? thread.map(m=>{
+          const mine = m.from==='admin';
+          return `<div class="chat-bubble ${mine?'chat-mine':'chat-theirs'}">${escapeHtml(m.matn)}<span class="chat-time">${new Date(m.ts).toLocaleString('uz-UZ')}</span></div>`;
+        }).join('') : `<div class="empty">Hali xabar yo'q.</div>`}
+      </div>
+      <div class="chat-input-row">
+        <input type="text" id="supportReplyInput" placeholder="Javob yozing..." autocomplete="off">
+        <button class="btn-accent" id="sendSupportReplyBtn">Yuborish</button>
+      </div>
+    </div>`;
+  }
+  return `
+  <div class="sheet">
+    <div class="eyebrow">Yordam so'rovlari (${chats.length})</div>
+    ${chats.length ? chats.map(c=>{
+      const last = (c.messages||[])[c.messages.length-1];
+      return `
+      <div class="plan-item" data-open-support="${escapeHtml(c.userEmail)}" style="cursor:pointer;">
+        <div class="item-top">
+          <div>
+            <div class="item-title">${escapeHtml(c.userEmail)}</div>
+            <div class="item-meta">${last?escapeHtml(last.matn.slice(0,60)):''}</div>
+          </div>
+          <span class="item-meta">${c.updatedAt?new Date(c.updatedAt).toLocaleDateString('uz-UZ'):''}</span>
+        </div>
+      </div>`;
+    }).join('') : `<div class="empty">${svgIcon('chat')}<div>Hali hech kim yozmagan.</div></div>`}
+  </div>`;
 }
 
 function renderSAAds(){
@@ -456,6 +523,16 @@ function attachDashboardHandlers(){
   if(adf) adf.addEventListener('submit', submitAdForm);
   document.querySelectorAll('[data-ad-active]').forEach(cb=> cb.addEventListener('change', ()=> toggleAdActive(cb.dataset.adActive, cb.checked)));
   document.querySelectorAll('[data-del-ad]').forEach(b=> b.addEventListener('click', ()=> delAd(b.dataset.delAd)));
+  document.querySelectorAll('[data-open-support]').forEach(el=> el.addEventListener('click', ()=>{
+    state.adminData.openSupportEmail = el.dataset.openSupport;
+    render();
+  }));
+  const btsl = document.getElementById('backToSupportListBtn');
+  if(btsl) btsl.addEventListener('click', ()=>{ state.adminData.openSupportEmail = null; render(); });
+  const ssrb = document.getElementById('sendSupportReplyBtn');
+  if(ssrb) ssrb.addEventListener('click', ()=> sendSupportReply(state.adminData.openSupportEmail));
+  const sri = document.getElementById('supportReplyInput');
+  if(sri) sri.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); sendSupportReply(state.adminData.openSupportEmail); } });
 }
 
 render();
