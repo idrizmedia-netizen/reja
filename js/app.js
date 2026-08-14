@@ -99,6 +99,7 @@ async function loginAs(acc){
     startThreadListeners(state.parentData.children.map(c=>c.email), 'parent');
   }
   startBroadcastListener();
+  startSupportListener();
   loadAdsForUser();
   state.view = 'app';
   state.tab = defaultTab();
@@ -320,6 +321,37 @@ async function toggleLocationShare(){
     stopLocationSharing();
     await locationClear(sanitizeKey(state.user.email));
     showToast("Joylashuvni ulashish o'chirildi.");
+  }
+}
+
+// =====================================================================
+// 🆘 SOS — talaba bosganda, bog'langan BARCHA ota-onalarga joriy
+// joylashuvi bilan darhol xabar boradi (mavjud suhbat/bildirishnoma
+// infratuzilmasi orqali — alohida serverga ehtiyoj yo'q).
+// =====================================================================
+async function triggerSOS(){
+  const parents = state.parentData.linkedParents || [];
+  if(!parents.length){ showToast("Hozircha hech qanday ota-ona bilan bog'lanmagansiz."); return; }
+  if(!confirm("Ota-onangizga YORDAM KERAK xabari va joylashuvingiz yuborilsinmi?")) return;
+  const send = async (mapsLink)=>{
+    let ok = 0;
+    for(const parentEmail of parents){
+      const tKey = threadKey(state.user.email, parentEmail);
+      const thread = await sGet(tKey) || [];
+      thread.push({ id: uid(), from: 'child', matn: "🆘 YORDAM KERAK!"+(mapsLink?" Joylashuvim: "+mapsLink:" (joylashuv aniqlanmadi)"), ts: Date.now(), sos: true });
+      const saved = await sSet(tKey, thread);
+      if(saved) ok++;
+    }
+    showToast(ok ? "Xabar "+ok+" ta ota-onaga yuborildi." : "Xabar yuborilmadi, qayta urinib ko'ring.");
+  };
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(
+      (pos)=> send(`https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`),
+      ()=> send(null),
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  } else {
+    send(null);
   }
 }
 function updateAdTopBanner(){
@@ -647,6 +679,7 @@ function logout(){
   if(engineTimer) clearInterval(engineTimer);
   stopThreadListeners();
   stopBroadcastListener();
+  stopSupportListener();
   stopAdRotation();
   stopLocationSharing();
   state.user = null;
@@ -663,7 +696,81 @@ function switchTab(t){ state.tab = t; state.modal = null; render(); }
 
 function openModal(kind, extra){ state.modal = Object.assign({ kind }, extra||{}); render(); }
 
-function closeModal(){ state.modal = null; render(); }
+// =====================================================================
+// QR-kod skanerlash (kamera orqali, jsQR kutubxonasi bilan — butunlay
+// mijoz tomonida, hech qanday serverga yubormaydi).
+// =====================================================================
+let _qrStream = null;
+let _qrRAF = null;
+function openQrScanModal(){
+  openModal('qrScan');
+  startQrScan();
+}
+function stopQrScan(){
+  if(_qrRAF){ cancelAnimationFrame(_qrRAF); _qrRAF = null; }
+  if(_qrStream){ _qrStream.getTracks().forEach(t=>t.stop()); _qrStream = null; }
+}
+async function startQrScan(){
+  const video = document.getElementById('qrVideo');
+  const statusEl = document.getElementById('qrScanStatus');
+  if(!video) return;
+  if(typeof jsQR === 'undefined'){ if(statusEl) statusEl.textContent = "QR o'qish kutubxonasi yuklanmadi."; return; }
+  try{
+    _qrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  }catch(e){
+    if(statusEl) statusEl.textContent = "Kameraga ruxsat berilmadi.";
+    return;
+  }
+  if(!state.modal || state.modal.kind !== 'qrScan'){ stopQrScan(); return; } // shu orada modal yopilgan
+  video.srcObject = _qrStream;
+  await video.play().catch(()=>{});
+  if(statusEl) statusEl.textContent = "Qidirilmoqda...";
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const tick = ()=>{
+    if(!state.modal || state.modal.kind !== 'qrScan'){ stopQrScan(); return; }
+    if(video.readyState === video.HAVE_ENOUGH_DATA){
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imgData.data, imgData.width, imgData.height);
+      if(code && code.data){
+        stopQrScan();
+        const email = code.data.trim();
+        openModal('addChild', { prefillEmail: email });
+        return;
+      }
+    }
+    _qrRAF = requestAnimationFrame(tick);
+  };
+  _qrRAF = requestAnimationFrame(tick);
+}
+
+function closeModal(){ stopQrScan(); state.modal = null; render(); }
+
+// =====================================================================
+// Ovozli kiritish — brauzerning o'ziga xos (bepul, hech qanday API
+// kalit kerak emas) Web Speech API orqali. Faqat Chrome/Edge/Android
+// brauzerlarida ishonchli ishlaydi; boshqalarida tugma shunchaki
+// hech narsa qilmaydi (o'rniga foydalanuvchi qo'lda yozadi).
+// =====================================================================
+function startVoiceInput(btn){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ showToast("Bu brauzer ovozli kiritishni qo'llab-quvvatlamaydi."); return; }
+  const targetName = btn.dataset.voiceTarget;
+  const form = btn.closest('form');
+  const input = form ? form.querySelector(`[name="${targetName}"]`) : null;
+  if(!input) return;
+  const rec = new SR();
+  rec.lang = 'uz-UZ';
+  rec.interimResults = false;
+  rec.maxAlternatives = 1;
+  btn.textContent = '🔴';
+  rec.onresult = (e)=>{ input.value = e.results[0][0].transcript; };
+  rec.onerror = ()=>{ showToast("Ovozni tanib bo'lmadi, qayta urinib ko'ring."); };
+  rec.onend = ()=>{ btn.textContent = '🎤'; };
+  try{ rec.start(); }catch(e){ btn.textContent = '🎤'; }
+}
 
 async function openLocationModal(email, name){
   openModal('viewLocation', { childEmail: email, childName: name });
@@ -1277,6 +1384,55 @@ async function sendChat(e){
   setTimeout(()=>{ const cl = document.querySelector('.chat-list'); if(cl) cl.scrollTop = cl.scrollHeight; }, 30);
 }
 
+// =====================================================================
+// Yordam/aloqa suhbati (foydalanuvchi ↔ tizim egasi)
+// =====================================================================
+async function openSupportChat(){
+  state.supportThread = await supportChatGet(state.user.email);
+  state.user.lastReadSupport = Date.now();
+  state.supportUnread = 0;
+  openModal('supportChat');
+  sSet('account:'+sanitizeKey(state.user.email), state.user).catch(()=>{});
+  setTimeout(()=>{ const cl = document.getElementById('supportChatList'); if(cl) cl.scrollTop = cl.scrollHeight; }, 60);
+}
+async function sendSupportMessage(e){
+  e.preventDefault();
+  const f = e.target;
+  const matn = f.matn.value.trim();
+  if(!matn) return;
+  const thread = state.supportThread || [];
+  thread.push({ id: uid(), from: 'user', matn, ts: Date.now() });
+  const saved = await supportChatSend(state.user.email, thread);
+  if(!saved){ showToast("Xabar yuborilmadi."); return; }
+  state.supportThread = thread;
+  f.reset();
+  render();
+  setTimeout(()=>{ const cl = document.getElementById('supportChatList'); if(cl) cl.scrollTop = cl.scrollHeight; }, 30);
+}
+let _supportUnsub = null;
+function stopSupportListener(){
+  if(_supportUnsub){ try{ _supportUnsub(); }catch(e){} _supportUnsub = null; }
+}
+function startSupportListener(){
+  stopSupportListener();
+  if(!state.user) return;
+  let firstSnapshot = true;
+  try{
+    _supportUnsub = supportChatDoc(state.user.email).onSnapshot((doc)=>{
+      const thread = (doc.exists && doc.data().messages) || [];
+      const lastRead = state.user.lastReadSupport || 0;
+      const unread = thread.filter(m=> m.from==='admin' && m.ts>lastRead);
+      state.supportUnread = unread.length;
+      if(state.modal && state.modal.kind==='supportChat'){ state.supportThread = thread; }
+      if(!firstSnapshot && unread.length){
+        fireNotif('💬 Tizim egasidan javob', unread[unread.length-1].matn);
+      }
+      firstSnapshot = false;
+      render();
+    }, (err)=> console.error('support listener', err));
+  }catch(e){ console.error('startSupportListener', e); }
+}
+
 function renderSkeleton(){
   const bar = (w)=>`<div class="skel-bar" style="width:${w}"></div>`;
   return `
@@ -1499,7 +1655,7 @@ function renderApp(){
   <div class="topbar">
     <div class="brand">Re<em>ja</em></div>
     <div class="topbar-right">
-      <button class="theme-toggle" id="notifBellBtn" title="Bildirishnomalar" style="position:relative;">${svgIcon('bell')}${(()=>{ const chatUnread = Object.values(state.parentData.unreadByEmail||{}).reduce((a,b)=>a+b,0); const total = chatUnread + (state.broadcastUnread||0); return total ? `<span class="badge unread" style="position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;font-size:10px;display:flex;align-items:center;justify-content:center;padding:0 3px;">${total>9?'9+':total}</span>` : ''; })()}</button>
+      <button class="theme-toggle" id="notifBellBtn" title="Bildirishnomalar" style="position:relative;">${svgIcon('bell')}${(()=>{ const chatUnread = Object.values(state.parentData.unreadByEmail||{}).reduce((a,b)=>a+b,0); const total = chatUnread + (state.broadcastUnread||0) + (state.supportUnread||0); return total ? `<span class="badge unread" style="position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;font-size:10px;display:flex;align-items:center;justify-content:center;padding:0 3px;">${total>9?'9+':total}</span>` : ''; })()}</button>
       <button class="theme-toggle" id="themeToggleBtn" title="Kun/tun rejimi">${svgIcon(state.theme==='dark'?'sun':'moon')}</button>
       <button class="theme-toggle" id="langToggleBtn" title="Til / Язык / Language" style="width:auto;padding:0 10px;font-size:11px;font-weight:700;">${(state.lang||'uz').toUpperCase()}</button>
       <button class="userchip" id="userchipBtn">${escapeHtml((state.user.ism||state.user.email||'').split(' ')[0])} ⌄</button>
@@ -1807,11 +1963,26 @@ function renderProfile(){
       <button class="btn-small" id="notifPermBtn">${(window.Notification && Notification.permission==='granted') ? 'Yoqilgan ✓' : 'Ruxsat berish'}</button>
       <button class="btn-small" id="soundToggleBtn" style="margin-left:6px;">${u.soundOff ? '🔇 Ovoz o\'chiq' : '🔔 Ovoz yoniq'}</button>
     </div>
+    <div class="sheet" style="background:var(--alert-soft);border-left:3px solid var(--alert);">
+      <div class="eyebrow" style="color:var(--alert);">🆘 Tez yordam</div>
+      <p class="item-meta" style="margin-bottom:8px;">Xavfli yoki yordam kerak bo'lgan holatda bosing — bog'langan ota-onangizga joriy joylashuvingiz bilan darhol xabar boradi.</p>
+      <button class="btn-small" id="sosBtn" style="background:var(--alert);color:#fff;border-color:var(--alert);font-weight:700;">🆘 Yordam kerak!</button>
+    </div>
     <div class="sheet">
       <div class="eyebrow">📍 Joylashuv</div>
       <p class="item-meta" style="margin-bottom:8px;">Yoqsangiz, bog'langan ota-onangiz sizning so'nggi joylashuvingizni xaritada ko'ra oladi. Bu — SIZNING tanlovingiz, istalgan payt o'chirib qo'yishingiz mumkin, va o'chirilganda ota-ona hech narsani ko'rmaydi.</p>
       <button class="btn-small ${u.shareLocation?'btn-plum':''}" id="locShareBtn">${u.shareLocation ? '📍 Ulashish yoniq — o\'chirish' : "📍 Joylashuvni ulashishni yoqish"}</button>
       ${u.shareLocation ? `<div class="item-meta" style="margin-top:6px;" id="locStatusText">Joylashuv aniqlanmoqda...</div>` : ''}
+    </div>
+    <div class="sheet">
+      <div class="eyebrow">🔗 Ota-ona uchun QR-kod</div>
+      <p class="item-meta" style="margin-bottom:8px;">Ota-onangiz sizning email'ingizni qo'lda yozish o'rniga, shu QR-kodni skanerlab, tezda so'rov yubora oladi.</p>
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(u.email)}" alt="QR" style="border-radius:10px;background:#fff;padding:8px;">
+    </div>
+    <div class="sheet">
+      <div class="eyebrow">💬 Yordam / Aloqa</div>
+      <p class="item-meta" style="margin-bottom:8px;">Savol yoki taklifingiz bo'lsa, tizim egasiga yozing.</p>
+      <button class="btn-small" id="openSupportBtn">💬 Xabar yozish</button>
     </div>
     <div class="sheet">
       <div class="eyebrow">Ma'lumotlarim</div>
@@ -1834,6 +2005,12 @@ function renderProfile(){
       <div class="eyebrow">${t('farzand_qoshish')}</div>
       <p>${t('farzand_qoshish_izoh')}</p>
       <button class="btn-small btn-plum" id="addChildBtn2">Farzand qo'shish</button>
+      <button class="btn-small" id="scanQrBtn" style="margin-left:6px;">📷 QR skanerlash</button>
+    </div>
+    <div class="sheet">
+      <div class="eyebrow">💬 Yordam / Aloqa</div>
+      <p class="item-meta" style="margin-bottom:8px;">Savol yoki taklifingiz bo'lsa, tizim egasiga yozing.</p>
+      <button class="btn-small" id="openSupportBtn">💬 Xabar yozish</button>
     </div>
     <div class="sheet">
       <div class="eyebrow">Ma'lumotlarim</div>
@@ -2061,7 +2238,10 @@ function renderModal(){
           ${opt('kunlik','Kunlik')}${opt('haftalik','Haftalik')}${opt('oylik','Oylik')}${opt('yillik','Yillik')}
         </select>
         <label>${t('lbl_reja_nomi')}</label>
-        <input type="text" name="nom" placeholder="Masalan: Nazorat ishiga tayyorgarlik" value="${p?escapeHtml(p.nom):''}" required>
+        <div style="display:flex;gap:6px;">
+          <input type="text" name="nom" placeholder="Masalan: Nazorat ishiga tayyorgarlik" value="${p?escapeHtml(p.nom):''}" required style="flex:1;">
+          <button type="button" class="btn-small voice-btn" data-voice-target="nom" title="Ovoz orqali kiritish">🎤</button>
+        </div>
         <label>${t('lbl_sana')}</label>
         <input type="date" name="sana" value="${p?p.sana:''}" required>
         <label>${t('lbl_izoh')}</label>
@@ -2082,7 +2262,10 @@ function renderModal(){
       <div class="modal-head"><h3>${editing?"Eslatmani tahrirlash":"Eslatma qo'yish"}</h3><button class="close-x" id="modalClose">✕</button></div>
       <form id="reminderForm">
         <label>${t('lbl_nima_haqida')}</label>
-        <input type="text" name="matn" placeholder="Masalan: Kitobni qaytarish" value="${r?escapeHtml(r.matn):''}" required>
+        <div style="display:flex;gap:6px;">
+          <input type="text" name="matn" placeholder="Masalan: Kitobni qaytarish" value="${r?escapeHtml(r.matn):''}" required style="flex:1;">
+          <button type="button" class="btn-small voice-btn" data-voice-target="matn" title="Ovoz orqali kiritish">🎤</button>
+        </div>
         <div class="row2">
           <div><label>${t('lbl_sana')}</label><input type="date" name="sana" value="${r?r.sana:''}" required></div>
           <div><label>${t('lbl_vaqt')}</label><input type="time" name="vaqt" value="${r?r.vaqt:''}" required></div>
@@ -2155,13 +2338,25 @@ function renderModal(){
       <div class="modal-head"><h3>Farzand qo'shish</h3><button class="close-x" id="modalClose">✕</button></div>
       <form id="addChildForm">
         <label>${t('lbl_farzand_email')}</label>
-        <input type="email" name="childEmail" placeholder="farzand@misol.uz" required>
+        <input type="email" name="childEmail" placeholder="farzand@misol.uz" value="${escapeHtml(state.modal.prefillEmail||'')}" required>
+        <button type="button" class="btn-small" id="scanQrInModalBtn" style="margin-top:8px;">📷 QR-kod orqali skanerlash</button>
         <div class="note">Farzandingiz shu ilovada allaqachon ro'yxatdan o'tgan bo'lishi kerak. So'rov yuboriladi va u tasdiqlagach bog'lanasiz.</div>
         <div id="modal-err" class="err"></div>
         <button class="btn-primary" type="submit">So'rov yuborish</button>
       </form>
     </div>
   </div>`;
+  if(k==='qrScan'){
+    return `
+    <div class="modal-wrap" id="modalWrap">
+      <div class="modal">
+        <div class="modal-head"><h3>QR-kodni skanerlash</h3><button class="close-x" id="modalClose">✕</button></div>
+        <p class="item-meta" style="margin-bottom:8px;">Farzandingizning "Profil" bo'limidagi QR-kodini kameraga ko'rsating.</p>
+        <video id="qrVideo" style="width:100%;border-radius:12px;background:#000;" playsinline muted></video>
+        <div id="qrScanStatus" class="item-meta" style="margin-top:8px;text-align:center;">Kamera ochilmoqda...</div>
+      </div>
+    </div>`;
+  }
   if(k==='parentPlan'){
     const editing = !!state.modal.editId;
     const child = state.parentData.children.find(c=>c.email===state.modal.childEmail);
@@ -2227,6 +2422,26 @@ function renderModal(){
           }).join('') : `<div class="empty">Hali xabar yo'q. Birinchi bo'lib yozing.</div>`}
         </div>
         <form id="chatForm" class="chat-input-row">
+          <input type="text" name="matn" placeholder="Xabar yozing..." autocomplete="off">
+          <button type="submit" class="btn-accent">Yuborish</button>
+        </form>
+      </div>
+    </div>`;
+  }
+  if(k==='supportChat'){
+    const thread = state.supportThread || [];
+    return `
+    <div class="modal-wrap" id="modalWrap">
+      <div class="modal">
+        <div class="modal-head"><h3>💬 Yordam / Aloqa</h3><button class="close-x" id="modalClose">✕</button></div>
+        <p class="item-meta" style="margin-bottom:8px;">Savol yoki muammoingiz bo'lsa, shu yerga yozing — tizim egasiga yetib boradi.</p>
+        <div class="chat-list" id="supportChatList">
+          ${thread.length ? thread.map(m=>{
+            const mine = m.from === 'user';
+            return `<div class="chat-bubble ${mine?'chat-mine':'chat-theirs'}">${escapeHtml(m.matn)}<span class="chat-time">${fmtDateTime(m.ts)}</span></div>`;
+          }).join('') : `<div class="empty">Hali xabar yo'q. Yozib ko'ring.</div>`}
+        </div>
+        <form id="supportChatForm" class="chat-input-row">
           <input type="text" name="matn" placeholder="Xabar yozing..." autocomplete="off">
           <button type="submit" class="btn-accent">Yuborish</button>
         </form>
@@ -2300,6 +2515,15 @@ function attachAppHandlers(){
   if(lsb) lsb.addEventListener('click', toggleLocationShare);
   const acb2 = document.getElementById('addChildBtn2');
   if(acb2) acb2.addEventListener('click', ()=> openModal('addChild'));
+  const sosb = document.getElementById('sosBtn');
+  if(sosb) sosb.addEventListener('click', triggerSOS);
+  const osb = document.getElementById('openSupportBtn');
+  if(osb) osb.addEventListener('click', openSupportChat);
+  const sqb = document.getElementById('scanQrBtn');
+  if(sqb) sqb.addEventListener('click', openQrScanModal);
+  const sqmb = document.getElementById('scanQrInModalBtn');
+  if(sqmb) sqmb.addEventListener('click', openQrScanModal);
+  document.querySelectorAll('.voice-btn').forEach(b=> b.addEventListener('click', ()=> startVoiceInput(b)));
 
   document.querySelectorAll('[data-del-lesson]').forEach(b=> b.addEventListener('click', ()=> delLesson(b.dataset.delLesson)));
   document.querySelectorAll('[data-del-plan]').forEach(b=> b.addEventListener('click', ()=> delPlan(b.dataset.delPlan)));
@@ -2414,6 +2638,8 @@ function attachAppHandlers(){
   if(prf) prf.addEventListener('submit', parentAddReminder);
   const cf = document.getElementById('chatForm');
   if(cf) cf.addEventListener('submit', sendChat);
+  const scf = document.getElementById('supportChatForm');
+  if(scf) scf.addEventListener('submit', sendSupportMessage);
   const cl = document.querySelector('.chat-list');
   if(cl) cl.scrollTop = cl.scrollHeight;
 }
