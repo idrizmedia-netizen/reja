@@ -753,3 +753,27 @@ async function locationGet(studentKey){
     return doc.exists ? doc.data() : null;
   }catch(e){ console.error('locationGet', e); return null; }
 }
+
+// =====================================================================
+// Yordam/aloqa suhbati — har qanday foydalanuvchi bilan tizim egasi
+// o'rtasida.
+// =====================================================================
+function supportChatDoc(userEmail){
+  return _db.collection('supportChats').doc(sanitizeKey(userEmail));
+}
+async function supportChatGet(userEmail){
+  try{
+    const doc = await supportChatDoc(userEmail).get();
+    return doc.exists ? (doc.data().messages || []) : [];
+  }catch(e){ console.error('supportChatGet', e); return []; }
+}
+async function supportChatSend(userEmail, messages){
+  try{ await supportChatDoc(userEmail).set({ messages, updatedAt: Date.now() }); return true; }
+  catch(e){ console.error('supportChatSend', e); return false; }
+}
+async function supportChatListAll(){
+  try{
+    const snap = await _db.collection('supportChats').orderBy('updatedAt','desc').get();
+    return snap.docs.map(d=> Object.assign({ userEmail: d.id }, d.data()));
+  }catch(e){ console.error('supportChatListAll', e); return []; }
+}
