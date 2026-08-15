@@ -754,6 +754,33 @@ function closeModal(){ stopQrScan(); state.modal = null; render(); }
 // brauzerlarida ishonchli ishlaydi; boshqalarida tugma shunchaki
 // hech narsa qilmaydi (o'rniga foydalanuvchi qo'lda yozadi).
 // =====================================================================
+// =====================================================================
+// QR-kodni yuklab olish va ulashish
+// =====================================================================
+async function downloadQrCode(){
+  const img = document.getElementById('qrCodeImg');
+  if(!img) return;
+  try{
+    const resp = await fetch(img.src, { mode: 'cors' });
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'reja-qr-kod.png';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }catch(e){
+    // CORS yoki tarmoq bilan muammo bo'lsa — kamida rasmni yangi tab'da ochamiz,
+    // shunda foydalanuvchi qo'lda "Rasmni saqlash" qila oladi.
+    window.open(img.src, '_blank');
+  }
+}
+async function shareQrNative(){
+  const text = "Salom! \"Reja\" ilovasida meni farzand sifatida qo'shish uchun shu email'dan foydalaning: " + state.user.email;
+  try{
+    await navigator.share({ title: 'Reja', text, url: 'https://reja12.vercel.app' });
+  }catch(e){ /* foydalanuvchi bekor qilgan bo'lishi mumkin — muammo emas */ }
+}
+
 function startVoiceInput(btn){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){ showToast("Bu brauzer ovozli kiritishni qo'llab-quvvatlamaydi."); return; }
@@ -1977,7 +2004,18 @@ function renderProfile(){
     <div class="sheet">
       <div class="eyebrow">🔗 Ota-ona uchun QR-kod</div>
       <p class="item-meta" style="margin-bottom:8px;">Ota-onangiz sizning email'ingizni qo'lda yozish o'rniga, shu QR-kodni skanerlab, tezda so'rov yubora oladi.</p>
-      <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(u.email)}" alt="QR" style="border-radius:10px;background:#fff;padding:8px;">
+      <img id="qrCodeImg" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(u.email)}" alt="QR" style="border-radius:10px;background:#fff;padding:8px;display:block;">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
+        <button class="btn-small" id="qrDownloadBtn">⬇ Yuklab olish</button>
+        ${navigator.share ? `<button class="btn-small btn-plum" id="qrNativeShareBtn">📤 Ulashish</button>` : ''}
+      </div>
+      <div class="note" style="margin:10px 0 6px;">Yoki to'g'ridan-to'g'ri yuboring:</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="btn-small" style="text-decoration:none;background:#26A5E4;color:#fff;border-color:#26A5E4;" href="${(()=>{const txt="Salom! \"Reja\" ilovasida meni farzand sifatida qo'shish uchun shu email'dan foydalaning: "+u.email; return 'https://t.me/share/url?url='+encodeURIComponent('https://reja12.vercel.app')+'&text='+encodeURIComponent(txt);})()}" target="_blank" rel="noopener noreferrer">✈️ Telegram</a>
+        <a class="btn-small" style="text-decoration:none;background:#25D366;color:#fff;border-color:#25D366;" href="${(()=>{const txt="Salom! \"Reja\" ilovasida meni farzand sifatida qo'shish uchun shu email'dan foydalaning: "+u.email; return 'https://wa.me/?text='+encodeURIComponent(txt);})()}" target="_blank" rel="noopener noreferrer">💬 WhatsApp</a>
+        <a class="btn-small" style="text-decoration:none;" href="${(()=>{const subj="Reja — bog'lanish uchun email"; const txt="Salom! \"Reja\" ilovasida meni farzand sifatida qo'shish uchun shu email'dan foydalaning: "+u.email; return 'mailto:?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(txt);})()}">✉️ Email</a>
+        <a class="btn-small" style="text-decoration:none;" href="${(()=>{const txt="Salom! \"Reja\" ilovasida meni farzand sifatida qo'shish uchun shu email'dan foydalaning: "+u.email; return 'sms:?body='+encodeURIComponent(txt);})()}">💬 SMS</a>
+      </div>
     </div>
     <div class="sheet">
       <div class="eyebrow">💬 Yordam / Aloqa</div>
@@ -2372,7 +2410,10 @@ function renderModal(){
           ${opt('kunlik','Kunlik')}${opt('haftalik','Haftalik')}${opt('oylik','Oylik')}${opt('yillik','Yillik')}
         </select>
         <label>${t('lbl_reja_nomi')}</label>
-        <input type="text" name="nom" placeholder="Masalan: Repetitorga borish" value="${p?escapeHtml(p.nom):''}" required>
+        <div style="display:flex;gap:6px;">
+          <input type="text" name="nom" placeholder="Masalan: Repetitorga borish" value="${p?escapeHtml(p.nom):''}" required style="flex:1;">
+          <button type="button" class="btn-small voice-btn" data-voice-target="nom" title="Ovoz orqali kiritish">🎤</button>
+        </div>
         <label>${t('lbl_sana')}</label>
         <input type="date" name="sana" value="${p?p.sana:''}" required>
         <label>${t('lbl_izoh')}</label>
@@ -2394,7 +2435,10 @@ function renderModal(){
       <div class="modal-head"><h3>${editing?"Eslatmani tahrirlash":"Farzand uchun eslatma"}</h3><button class="close-x" id="modalClose">✕</button></div>
       <form id="parentReminderForm">
         <label>${t('lbl_nima_haqida')}</label>
-        <input type="text" name="matn" placeholder="Masalan: Sport mashg'ulotiga borish" value="${r?escapeHtml(r.matn):''}" required>
+        <div style="display:flex;gap:6px;">
+          <input type="text" name="matn" placeholder="Masalan: Sport mashg'ulotiga borish" value="${r?escapeHtml(r.matn):''}" required style="flex:1;">
+          <button type="button" class="btn-small voice-btn" data-voice-target="matn" title="Ovoz orqali kiritish">🎤</button>
+        </div>
         <div class="row2">
           <div><label>${t('lbl_sana')}</label><input type="date" name="sana" value="${r?r.sana:''}" required></div>
           <div><label>${t('lbl_vaqt')}</label><input type="time" name="vaqt" value="${r?r.vaqt:''}" required></div>
@@ -2423,6 +2467,7 @@ function renderModal(){
         </div>
         <form id="chatForm" class="chat-input-row">
           <input type="text" name="matn" placeholder="Xabar yozing..." autocomplete="off">
+          <button type="button" class="btn-small voice-btn" data-voice-target="matn" title="Ovoz orqali kiritish">🎤</button>
           <button type="submit" class="btn-accent">Yuborish</button>
         </form>
       </div>
@@ -2443,6 +2488,7 @@ function renderModal(){
         </div>
         <form id="supportChatForm" class="chat-input-row">
           <input type="text" name="matn" placeholder="Xabar yozing..." autocomplete="off">
+          <button type="button" class="btn-small voice-btn" data-voice-target="matn" title="Ovoz orqali kiritish">🎤</button>
           <button type="submit" class="btn-accent">Yuborish</button>
         </form>
       </div>
@@ -2524,6 +2570,10 @@ function attachAppHandlers(){
   const sqmb = document.getElementById('scanQrInModalBtn');
   if(sqmb) sqmb.addEventListener('click', openQrScanModal);
   document.querySelectorAll('.voice-btn').forEach(b=> b.addEventListener('click', ()=> startVoiceInput(b)));
+  const qrdb = document.getElementById('qrDownloadBtn');
+  if(qrdb) qrdb.addEventListener('click', downloadQrCode);
+  const qrsb = document.getElementById('qrNativeShareBtn');
+  if(qrsb) qrsb.addEventListener('click', shareQrNative);
 
   document.querySelectorAll('[data-del-lesson]').forEach(b=> b.addEventListener('click', ()=> delLesson(b.dataset.delLesson)));
   document.querySelectorAll('[data-del-plan]').forEach(b=> b.addEventListener('click', ()=> delPlan(b.dataset.delPlan)));
