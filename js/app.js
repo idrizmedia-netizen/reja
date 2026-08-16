@@ -774,11 +774,28 @@ async function downloadQrCode(){
     window.open(img.src, '_blank');
   }
 }
-async function shareQrNative(){
+function openShareSheet(){
+  openModal('shareSheet');
+}
+async function shareViaApp(appKey){
   const text = "Salom! \"Reja\" ilovasida meni farzand sifatida qo'shish uchun shu email'dan foydalaning: " + state.user.email;
-  try{
-    await navigator.share({ title: 'Reja', text, url: 'https://reja12.vercel.app' });
-  }catch(e){ /* foydalanuvchi bekor qilgan bo'lishi mumkin — muammo emas */ }
+  const links = {
+    telegram: 'https://t.me/share/url?url='+encodeURIComponent('https://reja12.vercel.app')+'&text='+encodeURIComponent(text),
+    whatsapp: 'https://wa.me/?text='+encodeURIComponent(text),
+    email: 'mailto:?subject='+encodeURIComponent("Reja — bog'lanish uchun email")+'&body='+encodeURIComponent(text),
+    sms: 'sms:?body='+encodeURIComponent(text)
+  };
+  if(appKey === 'more' && navigator.share){
+    closeModal();
+    try{ await navigator.share({ title: 'Reja', text, url: 'https://reja12.vercel.app' }); }
+    catch(e){ /* foydalanuvchi bekor qilgan bo'lishi mumkin — muammo emas */ }
+    return;
+  }
+  const url = links[appKey];
+  if(url){
+    closeModal();
+    window.open(url, appKey==='email'||appKey==='sms' ? '_self' : '_blank');
+  }
 }
 
 function startVoiceInput(btn){
@@ -2007,14 +2024,7 @@ function renderProfile(){
       <img id="qrCodeImg" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(u.email)}" alt="QR" style="border-radius:10px;background:#fff;padding:8px;display:block;">
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
         <button class="btn-small" id="qrDownloadBtn">⬇ Yuklab olish</button>
-        ${navigator.share ? `<button class="btn-small btn-plum" id="qrNativeShareBtn">📤 Ulashish</button>` : ''}
-      </div>
-      <div class="note" style="margin:10px 0 6px;">Yoki to'g'ridan-to'g'ri yuboring:</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <a class="btn-small" style="text-decoration:none;background:#26A5E4;color:#fff;border-color:#26A5E4;" href="${(()=>{const txt="Salom! \"Reja\" ilovasida meni farzand sifatida qo'shish uchun shu email'dan foydalaning: "+u.email; return 'https://t.me/share/url?url='+encodeURIComponent('https://reja12.vercel.app')+'&text='+encodeURIComponent(txt);})()}" target="_blank" rel="noopener noreferrer">✈️ Telegram</a>
-        <a class="btn-small" style="text-decoration:none;background:#25D366;color:#fff;border-color:#25D366;" href="${(()=>{const txt="Salom! \"Reja\" ilovasida meni farzand sifatida qo'shish uchun shu email'dan foydalaning: "+u.email; return 'https://wa.me/?text='+encodeURIComponent(txt);})()}" target="_blank" rel="noopener noreferrer">💬 WhatsApp</a>
-        <a class="btn-small" style="text-decoration:none;" href="${(()=>{const subj="Reja — bog'lanish uchun email"; const txt="Salom! \"Reja\" ilovasida meni farzand sifatida qo'shish uchun shu email'dan foydalaning: "+u.email; return 'mailto:?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(txt);})()}">✉️ Email</a>
-        <a class="btn-small" style="text-decoration:none;" href="${(()=>{const txt="Salom! \"Reja\" ilovasida meni farzand sifatida qo'shish uchun shu email'dan foydalaning: "+u.email; return 'sms:?body='+encodeURIComponent(txt);})()}">💬 SMS</a>
+        <button class="btn-small btn-plum" id="qrShareBtn">📤 Ulashish</button>
       </div>
     </div>
     <div class="sheet">
@@ -2395,6 +2405,30 @@ function renderModal(){
       </div>
     </div>`;
   }
+  if(k==='shareSheet'){
+    const opts = [
+      { key:'telegram', label:'Telegram', emoji:'✈️', bg:'#26A5E4' },
+      { key:'whatsapp', label:'WhatsApp', emoji:'💬', bg:'#25D366' },
+      { key:'email', label:'Email', emoji:'✉️', bg:'var(--plum)' },
+      { key:'sms', label:'SMS', emoji:'💬', bg:'var(--accent)' },
+    ];
+    if(navigator.share) opts.push({ key:'more', label:"Boshqa ilovalar", emoji:'📤', bg:'var(--ink)' });
+    return `
+    <div class="modal-wrap" id="modalWrap">
+      <div class="modal">
+        <div class="modal-head"><h3>Qaysi ilova orqali yuborasiz?</h3><button class="close-x" id="modalClose">✕</button></div>
+        <p class="item-meta" style="margin-bottom:12px;">Ilovani tanlang — u ochiladi va xabar tayyor turadi, faqat qabul qiluvchini tanlab yuborasiz.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:10px;">
+          ${opts.map(o=>`
+            <button type="button" class="share-app-btn" data-share-app="${o.key}" style="background:${o.bg};color:#fff;border:none;border-radius:12px;padding:14px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;">
+              <span style="font-size:24px;">${o.emoji}</span>
+              <span style="font-size:11.5px;font-weight:600;">${o.label}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    </div>`;
+  }
   if(k==='parentPlan'){
     const editing = !!state.modal.editId;
     const child = state.parentData.children.find(c=>c.email===state.modal.childEmail);
@@ -2572,8 +2606,9 @@ function attachAppHandlers(){
   document.querySelectorAll('.voice-btn').forEach(b=> b.addEventListener('click', ()=> startVoiceInput(b)));
   const qrdb = document.getElementById('qrDownloadBtn');
   if(qrdb) qrdb.addEventListener('click', downloadQrCode);
-  const qrsb = document.getElementById('qrNativeShareBtn');
-  if(qrsb) qrsb.addEventListener('click', shareQrNative);
+  const qrsb = document.getElementById('qrShareBtn');
+  if(qrsb) qrsb.addEventListener('click', openShareSheet);
+  document.querySelectorAll('[data-share-app]').forEach(b=> b.addEventListener('click', ()=> shareViaApp(b.dataset.shareApp)));
 
   document.querySelectorAll('[data-del-lesson]').forEach(b=> b.addEventListener('click', ()=> delLesson(b.dataset.delLesson)));
   document.querySelectorAll('[data-del-plan]').forEach(b=> b.addEventListener('click', ()=> delPlan(b.dataset.delPlan)));
