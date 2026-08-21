@@ -877,7 +877,7 @@ function checkAchievements(){
       const ach = ACHIEVEMENTS[k];
       if(ach) fireNotif(ach.emoji+' Yangi nishon!', ach.title+' — '+ach.desc);
     });
-    render();
+    openModal('achievementUnlock', { keys: newly });
   }
 }
 
@@ -1560,13 +1560,18 @@ function renderAuth(){
   const role = state.authRole;
   const pg = state.pendingGoogle || {};
   return `
-  <div style="padding:40px 22px 30px;">
+  <div class="auth-hero">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-      <div class="brand" style="font-size:26px;margin-bottom:2px;">Re<em>ja</em></div>
-      <button class="theme-toggle" id="themeToggleBtn" title="Kun/tun rejimi">${svgIcon(state.theme==='dark'?'sun':'moon')}</button>
-      <button class="theme-toggle" id="langToggleBtn" title="Til / Язык / Language" style="width:auto;padding:0 10px;font-size:11px;font-weight:700;">${(state.lang||'uz').toUpperCase()}</button>
+      <div class="brand" style="font-size:28px;margin-bottom:2px;color:#fff;">Re<em style="color:var(--accent-soft);">ja</em></div>
+      <div style="display:flex;gap:8px;">
+        <button class="theme-toggle" id="themeToggleBtn" title="Kun/tun rejimi" style="background:rgba(255,255,255,0.14);border-color:rgba(255,255,255,0.25);">${svgIcon(state.theme==='dark'?'sun':'moon')}</button>
+        <button class="theme-toggle" id="langToggleBtn" title="Til / Язык / Language" style="width:auto;padding:0 10px;font-size:11px;font-weight:700;background:rgba(255,255,255,0.14);border-color:rgba(255,255,255,0.25);color:#fff;">${(state.lang||'uz').toUpperCase()}</button>
+      </div>
     </div>
-    <p style="margin-bottom:24px;">${t('tagline')}</p>
+    <div class="auth-hero-icon">📚</div>
+    <p style="color:rgba(255,255,255,0.82);margin-bottom:0;">${t('tagline')}</p>
+  </div>
+  <div style="padding:22px 22px 30px;">
     ${isGoogleComplete ? `
     <div class="sheet sheet-plum">
       <div class="eyebrow">Ro'yxatni yakunlang</div>
@@ -2184,6 +2189,26 @@ function renderParentChildren(){
 
 function renderModal(){
   const k = state.modal.kind;
+  if(k==='achievementUnlock'){
+    const keys = state.modal.keys || [];
+    const items = keys.map(key=> ACHIEVEMENTS[key]).filter(Boolean);
+    if(!items.length) return '';
+    return `
+  <div class="modal-wrap" id="modalWrap">
+    <div class="modal achievement-modal">
+      <div class="achievement-burst">✨</div>
+      <div class="eyebrow" style="justify-content:center;">Yangi nishon${items.length>1?'lar':''}!</div>
+      ${items.map(ach=>`
+        <div class="achievement-reveal">
+          <div class="achievement-emoji">${ach.emoji}</div>
+          <div class="achievement-title">${escapeHtml(ach.title)}</div>
+          <div class="achievement-desc">${escapeHtml(ach.desc)}</div>
+        </div>
+      `).join('')}
+      <button class="btn-primary" id="achievementCloseBtn" style="margin-top:8px;">Rahmat! 🎉</button>
+    </div>
+  </div>`;
+  }
   if(k==='viewLocation'){
     return `
   <div class="modal-wrap" id="modalWrap">
@@ -2680,6 +2705,8 @@ function attachAppHandlers(){
   if(mc) mc.addEventListener('click', closeModal);
   const mw = document.getElementById('modalWrap');
   if(mw) mw.addEventListener('click', (e)=>{ if(e.target.id==='modalWrap') closeModal(); });
+  const acb = document.getElementById('achievementCloseBtn');
+  if(acb) acb.addEventListener('click', closeModal);
 
   document.querySelectorAll('[data-import-idx]').forEach(cb=> cb.addEventListener('change', ()=>{
     const idx = parseInt(cb.dataset.importIdx,10);
